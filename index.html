@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>EweOMe</title>
+
+  <!-- Firebase SDK (v9 compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* ================================================================
+       VARIABLES & RESET
+    ================================================================ */
+    :root {
+      --green-50:   #EAF3DE;
+      --green-100:  #C0DD97;
+      --green-600:  #3B6D11;
+      --green-800:  #27500A;
+      --amber-50:   #FAEEDA;
+      --amber-100:  #FAC775;
+      --amber-600:  #633806;
+      --amber-700:  #854F0B;
+      --red-50:     #FCEBEB;
+      --red-600:    #A32D2D;
+      --red-800:    #791F1F;
+
+      --text-1:     #111111;
+      --text-2:     #555555;
+      --text-3:     #999999;
+      --border:     rgba(0,0,0,0.10);
+      --surface:    #F5F5F0;
+      --bg:         #FFFFFF;
+      --radius-sm:  8px;
+      --radius-md:  12px;
+      --radius-lg:  16px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text-1:   #F0F0F0;
+        --text-2:   #AAAAAA;
+        --text-3:   #666666;
+        --border:   rgba(255,255,255,0.12);
+        --surface:  #1C1C1E;
+        --bg:       #111111;
+        --green-50: #162308;
+        --amber-50: #261A06;
+        --red-50:   #26080A;
+      }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--surface);
+      color: var(--text-1);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ================================================================
+       APP SHELL
+    ================================================================ */
+    #app {
+      max-width: 480px;
+      margin: 0 auto;
+      height: 100%;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .screen {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 72px;
+    }
+
+    /* ================================================================
+       BOTTOM NAV
+    ================================================================ */
+    .bottom-nav {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 64px;
+      background: var(--bg);
+      border-top: 0.5px solid var(--border);
+      display: flex;
+      z-index: 100;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    .nav-item {
+      flex: 1;
+      border: none;
+      background: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      font-size: 10px;
+      color: var(--text-3);
+      cursor: pointer;
+      transition: color 0.15s;
+      padding-bottom: 4px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-item.active { color: var(--green-600); }
+    .nav-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+
+    /* ================================================================
+       SCREEN HEADER
+    ================================================================ */
+    .screen-header {
+      padding: 14px 16px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      line-height: 1;
+      color: var(--text-2);
+      cursor: pointer;
+      padding: 0 8px 0 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .screen-title { font-size: 16px; font-weight: 500; color: var(--text-1); }
+
+    .step-dots { display: flex; gap: 5px; margin-left: auto; }
+    .sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+    .sdot.active { background: var(--green-600); }
+    .sdot.done   { background: var(--green-100); }
+
+    /* ================================================================
+       INPUTS
+    ================================================================ */
+    .input {
+      width: 100%;
+      padding: 11px 13px;
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 15px;
+      color: var(--text-1);
+      background: var(--bg);
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input:focus { border-color: var(--green-600); }
+    textarea.input { resize: none; line-height: 1.5; }
+
+    .field-label {
+      font-size: 12px;
+      color: var(--text-2);
+      margin-bottom: 7px;
+      display: block;
+    }
+
+    /* Big amount input */
+    .amount-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 28px 16px 16px;
+    }
+    .amount-symbol { font-size: 32px; font-weight: 300; color: var(--text-2); }
+    .amount-input {
+      font-size: 40px;
+      font-weight: 500;
+      text-align: center;
+      border: none;
+      border-bottom: 2px solid var(--green-600);
+      border-radius: 0;
+      width: 180px;
+      padding: 4px 0;
+      background: transparent;
+      color: var(--text-1);
+      outline: none;
+      font-family: inherit;
+    }
+    .amount-input::placeholder { color: var(--text-3); }
+
+    /* ================================================================
+       BUTTONS
+    ================================================================ */
+    .btn {
+      padding: 13px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      width: 100%;
+      display: block;
+      transition: opacity 0.1s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { opacity: 0.75; transform: scale(0.98); }
+    .btn-green  { background: var(--green-100);  color: var(--green-800); }
+    .btn-amber  { background: var(--amber-100);  color: var(--amber-600); }
+    .btn-red    { background: var(--red-50);      color: var(--red-600); border: 0.5px solid rgba(162,45,45,0.2); }
+    .btn-ghost  { background: var(--surface);    color: var(--text-1); border: 0.5px solid var(--border); }
+
+    /* ================================================================
+       LIST ITEMS
+    ================================================================ */
+    .list-item {
+      padding: 13px 16px;
+      border-bottom: 0.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s;
+    }
+    .list-item:active { background: var(--surface); }
+
+    /* ================================================================
+       AVATAR
+    ================================================================ */
+    .avatar {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 500;
+      flex-shrink: 0;
+      background: var(--green-50);
+      color: var(--green-600);
+    }
+    .avatar.amber { background: var(--amber-50); color: var(--amber-600); }
+
+    /* ================================================================
+       CARD (detail view)
+    ================================================================ */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 0.5px solid var(--border);
+    }
+    .card-row {
+      padding: 12px 16px;
+      border-bottom: 0.5px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+    .card-row:last-child { border-bottom: none; }
+    .card-key { font-size: 13px; color: var(--text-2); flex-shrink: 0; }
+    .card-val { font-size: 14px; font-weight: 500; text-align: right; }
+
+    /* ================================================================
+       STATUS TAGS
+    ================================================================ */
+    .tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .tag-green  { background: var(--green-50);  color: var(--green-600); }
+    .tag-amber  { background: var(--amber-50);  color: var(--amber-700); }
+    .tag-red    { background: var(--red-50);    color: var(--red-600); }
+
+    /* ================================================================
+       NOTIFICATION BANNER
+    ================================================================ */
+    .notif-banner {
+      margin: 10px 14px;
+      padding: 11px 13px;
+      background: var(--amber-50);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0.5px solid var(--amber-100);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .notif-dot { width: 8px; height: 8px; border-radius: 50%; background: #BA7517; flex-shrink: 0; }
+
+    /* ================================================================
+       HOME CIRCLES
+    ================================================================ */
+    .circle-btn {
+      width: 150px; height: 150px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: transform 0.12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .circle-btn:active { transform: scale(0.93); }
+    .circle-green { background: var(--green-100); }
+    .circle-amber { background: var(--amber-100); }
+    .circle-label {
+      font-size: 15px; font-weight: 500;
+      text-align: center; max-width: 100px; line-height: 1.25;
+    }
+    .circle-green .circle-label { color: var(--green-800); }
+    .circle-amber .circle-label { color: var(--amber-600); }
+    .circle-sub { font-size: 10px; text-align: center; max-width: 90px; }
+    .circle-green .circle-sub { color: var(--green-600); }
+    .circle-amber .circle-sub { color: var(--amber-700); }
+
+    /* ================================================================
+       POSITION SCREEN
+    ================================================================ */
+    .balance-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 16px;
+    }
+    .balance-card { border-radius: var(--radius-md); padding: 14px; text-align: center; }
+    .balance-card.green { background: var(--green-50); }
+    .balance-card.red   { background: var(--red-50); }
+    .balance-label  { font-size: 11px; margin-bottom: 4px; }
+    .balance-card.green .balance-label { color: var(--green-600); }
+    .balance-card.red   .balance-label { color: var(--red-600); }
+    .balance-amount { font-size: 22px; font-weight: 500; }
+    .balance-card.green .balance-amount { color: var(--green-800); }
+    .balance-card.red   .balance-amount { color: var(--red-800); }
+
+    /* ================================================================
+       SIGN-IN SCREEN
+    ================================================================ */
+    .signin-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100%;
+      padding: 40px 28px;
+      text-align: center;
+      gap: 24px;
+    }
+
+    .google-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 13px 24px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 15px;
+      font-family: inherit;
+      color: var(--text-1);
+      width: 100%;
+      max-width: 280px;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .google-btn:hover { background: var(--surface); }
+
+    /* ================================================================
+       MISC
+    ================================================================ */
+    .loading {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100%; color: var(--text-2); font-size: 14px;
+    }
+
+    .empty {
+      padding: 56px 28px;
+      text-align: center;
+      color: var(--text-2);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .success-screen {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 48px 28px; text-align: center; gap: 14px;
+      min-height: 450px;
+    }
+
+    .divider { border: none; border-top: 0.5px solid var(--border); }
+
+    .pending-counter {
+      min-width: 18px; height: 18px;
+      background: #BA7517;
+      color: white;
+      border-radius: 9px;
+      font-size: 10px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 5px;
+      margin-left: auto;
+    }
+  </style>
+</head>
+
+<body>
+<div id="app">
+  <div class="loading">Loading&hellip;</div>
+</div>
+
+<script>
+/* ================================================================
+   FIREBASE CONFIG
+   Replace the placeholder values below with your own config from:
+   Firebase Console → Project Settings → Your apps → Web app
+================================================================ */
+const firebaseConfig = {
+  apiKey:            "AIzaSyDpjdqGtpRbCb2NHeUBi7ODin8zWQs75fM",
+  authDomain:        "eweome-41e0f.firebaseapp.com",
+  projectId:         "eweome-41e0f",
+  storageBucket:     "eweome-41e0f.firebasestorage.app",
+  messagingSenderId: "802792165046",
+  appId:             "1:802792165046:web:8c547dfe07226ec7386017"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+/* ================================================================
+   APP STATE
+================================================================ */
+const A = {
+  user:           null,   // Firebase auth user object
+  userDoc:        null,   // Firestore /users/{uid} document
+  screen:         'loading',
+
+  // Claim being assembled step-by-step
+  claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '' },
+
+  // Counter-offer being assembled
+  query: { amount: '', comment: '' },
+
+  // Navigation targets for detail screens
+  selectedClaimId:  null,
+  selectedPersonId: null,
+
+  // Live Firestore data
+  pendingClaims: [],   // incoming, awaiting my response (or counter awaiting theirs)
+  sentClaims:    [],   // outgoing, awaiting their response
+  ledger:        [],   // accepted / settled
+  connections:   [],   // my saved contacts
+
+  // Firestore unsubscribe handles
+  _unsubs: []
+};
+
+/* ================================================================
+   UTILITIES
+================================================================ */
+function fmt(n)   { return '\u00a3' + parseFloat(n || 0).toFixed(2); }
+function today()  { return new Date().toISOString().split('T')[0]; }
+
+function fmtDate(d) {
+  if (!d) return '';
+  const [y, m, dy] = d.split('-');
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${parseInt(dy)} ${M[parseInt(m) - 1]} ${y}`;
+}
+
+function initials(name) {
+  if (!name) return '?';
+  return name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function tagForStatus(status) {
+  const map = {
+    pending:  ['tag-amber', 'Pending'],
+    queried:  ['tag-amber', 'Queried'],
+    accepted: ['tag-green', 'Settled'],
+    rejected: ['tag-red',   'Rejected']
+  };
+  const [cls, label] = map[status] || ['tag-amber', status];
+  return `<span class="tag ${cls}">${label}</span>`;
+}
+
+/* ================================================================
+   SVG ASSETS
+================================================================ */
+function sheepSvg(size) {
+  const s = size || 48;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 60 60" fill="none" aria-hidden="true">
+    <circle cx="30" cy="32" r="22" fill="#E8E8E8" stroke="#C0DD97" stroke-width="1.5"/>
+    <circle cx="18" cy="22" r="7"  fill="#F4F4F4" stroke="#C0DD97" stroke-width="1.2"/>
+    <circle cx="30" cy="16" r="7"  fill="#F4F4F4" stroke="#C0DD97" stroke-width="1.2"/>
+    <circle cx="42" cy="22" r="7"  fill="#F4F4F4" stroke="#C0DD97" stroke-width="1.2"/>
+    <circle cx="13" cy="32" r="6"  fill="#F4F4F4" stroke="#C0DD97" stroke-width="1.2"/>
+    <circle cx="47" cy="32" r="6"  fill="#F4F4F4" stroke="#C0DD97" stroke-width="1.2"/>
+    <ellipse cx="30" cy="42" rx="10" ry="9" fill="#EDD9A3"/>
+    <circle cx="26.5" cy="40" r="2" fill="#333"/>
+    <circle cx="33.5" cy="40" r="2" fill="#333"/>
+    <ellipse cx="30" cy="45" rx="2.5" ry="1.8" fill="#D4A0A0"/>
+  </svg>`;
+}
+
+function amberSheepSvg(size) {
+  const s = size || 32;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 60 60" fill="none" aria-hidden="true">
+    <circle cx="30" cy="32" r="22" fill="#E8E8E8" stroke="#FAC775" stroke-width="1.5"/>
+    <circle cx="18" cy="22" r="7"  fill="#F4F4F4" stroke="#FAC775" stroke-width="1.2"/>
+    <circle cx="30" cy="16" r="7"  fill="#F4F4F4" stroke="#FAC775" stroke-width="1.2"/>
+    <circle cx="42" cy="22" r="7"  fill="#F4F4F4" stroke="#FAC775" stroke-width="1.2"/>
+    <circle cx="13" cy="32" r="6"  fill="#F4F4F4" stroke="#FAC775" stroke-width="1.2"/>
+    <circle cx="47" cy="32" r="6"  fill="#F4F4F4" stroke="#FAC775" stroke-width="1.2"/>
+    <ellipse cx="30" cy="42" rx="10" ry="9" fill="#EDD9A3"/>
+    <circle cx="26.5" cy="40" r="2" fill="#633806"/>
+    <circle cx="33.5" cy="40" r="2" fill="#633806"/>
+    <ellipse cx="30" cy="45" rx="2.5" ry="1.8" fill="#D4A0A0"/>
+  </svg>`;
+}
+
+function googleIcon() {
+  return `<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>`;
+}
+
+/* ================================================================
+   NAVIGATION
+================================================================ */
+function go(screen) {
+  A.screen = screen;
+  render();
+  const el = document.querySelector('.screen');
+  if (el) el.scrollTop = 0;
+}
+
+const HOME_SCREENS = [
+  'home','ew_who','ew_amt','ew_date','ew_desc','ew_conf','ew_sent',
+  'io_who','io_amt','io_date','io_desc','io_conf','io_sent',
+  'req_detail','q_form','q_sent','new_conn'
+];
+
+/* ================================================================
+   RENDER ENGINE
+================================================================ */
+function render() {
+  const app = document.getElementById('app');
+  const showNav = !['loading','signin'].includes(A.screen);
+  const pendingCount = A.pendingClaims.length;
+
+  const content = {
+    loading:    renderLoading,
+    signin:     renderSignIn,
+    home:       renderHome,
+    ew_who:     renderWho,
+    ew_amt:     renderAmount,
+    ew_date:    renderDate,
+    ew_desc:    renderDesc,
+    ew_conf:    renderConfirm,
+    ew_sent:    renderSent,
+    io_who:     renderWho,
+    io_amt:     renderAmount,
+    io_date:    renderDate,
+    io_desc:    renderDesc,
+    io_conf:    renderConfirm,
+    io_sent:    renderSent,
+    req_detail: renderReqDetail,
+    q_form:     renderQueryForm,
+    q_sent:     renderQuerySent,
+    position:   renderPosition,
+    pos_detail: renderPosDetail,
+    settings:   renderSettings,
+    new_conn:   renderNewConn,
+  }[A.screen] || renderLoading;
+
+  if (!showNav) {
+    app.innerHTML = content();
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="screen">${content()}</div>
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button class="nav-item ${HOME_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('home')">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 12L12 3l9 9"/>
+          <path d="M5 10v10h5v-5h4v5h5V10"/>
+        </svg>
+        Home
+        ${pendingCount > 0 ? `<span class="pending-counter">${pendingCount}</span>` : ''}
+      </button>
+      <button class="nav-item ${['position','pos_detail'].includes(A.screen) ? 'active' : ''}" onclick="go('position')">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2"  y="3"  width="6" height="18" rx="1"/>
+          <rect x="9"  y="8"  width="6" height="13" rx="1"/>
+          <rect x="16" y="12" width="6" height="9"  rx="1"/>
+        </svg>
+        My position
+      </button>
+      <button class="nav-item ${A.screen === 'settings' ? 'active' : ''}" onclick="go('settings')">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+        Settings
+      </button>
+    </nav>`;
+}
+
+/* ================================================================
+   SCREEN: LOADING
+================================================================ */
+function renderLoading() {
+  return `<div class="loading">Loading&hellip;</div>`;
+}
+
+/* ================================================================
+   SCREEN: SIGN IN
+================================================================ */
+function renderSignIn() {
+  return `
+    <div class="signin-screen">
+      ${sheepSvg(80)}
+      <div>
+        <h1 style="font-size:28px;font-weight:500;letter-spacing:-0.5px;">EweOMe</h1>
+        <p style="font-size:13px;color:var(--text-2);margin-top:6px;">Keeping score, fairly.</p>
+      </div>
+      <p style="font-size:14px;color:var(--text-2);max-width:260px;line-height:1.7;">
+        Track money owed between family and friends — simply and honestly.
+      </p>
+      <button class="google-btn" onclick="signIn()">
+        ${googleIcon()}
+        Sign in with Google
+      </button>
+    </div>`;
+}
+
+/* ================================================================
+   SCREEN: HOME
+================================================================ */
+function renderHome() {
+  const pending  = A.pendingClaims;
+  const hp       = pending.length > 0;
+  const p        = pending[0];
+  const padTop   = hp ? '14px' : '28px';
+
+  return `
+    <div style="padding:18px 16px 8px;text-align:center;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px;">
+        ${sheepSvg(36)}
+        <div style="font-size:24px;font-weight:500;letter-spacing:-0.5px;">EweOMe</div>
+      </div>
+      <div style="font-size:12px;color:var(--text-2);">Keeping score, fairly.</div>
+    </div>
+
+    ${hp ? `
+      <div class="notif-banner" onclick="viewClaim('${p.id}')">
+        <div class="notif-dot"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:500;color:var(--amber-600);">
+            ${esc(p.creditorName)} sent you a claim
+          </div>
+          <div style="font-size:12px;color:var(--amber-700);margin-top:2px;">
+            ${fmt(p.amount)} &middot; ${esc(p.description)}
+          </div>
+        </div>
+        <div style="color:var(--amber-700);font-size:20px;flex-shrink:0;">&#8250;</div>
+      </div>
+    ` : ''}
+
+    <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:${padTop} 16px 24px;">
+      <button class="circle-btn circle-green" onclick="startClaim('eweome')">
+        ${sheepSvg(32)}
+        <div class="circle-label">You Owe Me</div>
+        <div class="circle-sub">Claim money owed to you</div>
+      </button>
+      <button class="circle-btn circle-amber" onclick="startClaim('ioowe')">
+        ${amberSheepSvg(32)}
+        <div class="circle-label">I Owe You</div>
+        <div class="circle-sub">Tell someone you owe them</div>
+      </button>
+    </div>`;
+}
+
+function startClaim(type) {
+  A.claim = { type, personId: null, personName: null, amount: '', date: today(), desc: '' };
+  go(type === 'eweome' ? 'ew_who' : 'io_who');
+}
+
+/* ================================================================
+   CLAIM FLOW HELPERS
+================================================================ */
+function dots(step, total) {
+  return `<div class="step-dots" aria-label="Step ${step} of ${total}">
+    ${Array.from({length: total}, (_, i) =>
+      `<div class="sdot ${i < step-1 ? 'done' : i === step-1 ? 'active' : ''}"></div>`
+    ).join('')}
+  </div>`;
+}
+
+function hdr(title, back, step, total) {
+  return `<div class="screen-header">
+    <button class="back-btn" onclick="go('${back}')" aria-label="Back">&#8249;</button>
+    <span class="screen-title">${title}</span>
+    ${step ? dots(step, total) : ''}
+  </div>`;
+}
+
+function pfx() { return A.claim.type === 'ioowe' ? 'io' : 'ew'; }
+
+/* ================================================================
+   SCREEN: WHO (step 1)
+================================================================ */
+function renderWho() {
+  const io = A.claim.type === 'ioowe';
+  const q  = io ? 'Who do you owe?' : 'Who owes you?';
+
+  const connRows = A.connections.map(c => `
+    <div class="list-item" onclick="selectPerson('${esc(c.id)}','${esc(c.name)}')">
+      <div class="avatar ${c.color || ''}">${initials(c.name)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;font-weight:500;">${esc(c.name)}</div>
+        <div style="font-size:12px;color:var(--text-2);">${esc(c.email || '')}</div>
+      </div>
+      <div style="color:var(--text-3);font-size:20px;">&#8250;</div>
+    </div>`).join('');
+
+  return `
+    ${hdr(q, 'home', 1, 4)}
+    ${connRows || `<div class="empty">No connections yet.<br>Add your first one below.</div>`}
+    <div class="list-item" onclick="go('new_conn')">
+      <div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:18px;">+</div>
+      <div>
+        <div style="font-size:15px;font-weight:500;color:var(--green-600);">New connection</div>
+        <div style="font-size:12px;color:var(--text-2);">Add someone by email</div>
+      </div>
+    </div>`;
+}
+
+function selectPerson(id, name) {
+  A.claim.personId   = id;
+  A.claim.personName = name;
+  go(pfx() + '_amt');
+}
+
+/* ================================================================
+   SCREEN: AMOUNT (step 2)
+================================================================ */
+function renderAmount() {
+  const io  = A.claim.type === 'ioowe';
+  const lbl = io
+    ? `How much do you owe ${esc(A.claim.personName)}?`
+    : `How much does ${esc(A.claim.personName)} owe you?`;
+
+  return `
+    ${hdr(lbl, pfx()+'_who', 2, 4)}
+    <div class="amount-wrap">
+      <span class="amount-symbol">&pound;</span>
+      <input
+        type="number"
+        id="amt-in"
+        class="amount-input"
+        placeholder="0.00"
+        step="0.01"
+        inputmode="decimal"
+        value="${esc(A.claim.amount)}"
+        oninput="A.claim.amount=this.value"
+        aria-label="Amount in pounds"
+      />
+    </div>
+    <div style="padding:0 16px;">
+      <button class="btn btn-green" onclick="fromAmount()">Next &rarr;</button>
+    </div>`;
+}
+
+function fromAmount() {
+  const el = document.getElementById('amt-in');
+  if (el) A.claim.amount = el.value;
+  if (!A.claim.amount || parseFloat(A.claim.amount) <= 0) {
+    if (el) el.style.borderBottomColor = '#E24B4A';
+    return;
+  }
+  go(pfx() + '_date');
+}
+
+/* ================================================================
+   SCREEN: DATE (step 3)
+================================================================ */
+function renderDate() {
+  return `
+    ${hdr('When did this happen?', pfx()+'_amt', 3, 4)}
+    <div style="padding:20px 16px;">
+      <input
+        type="date"
+        id="date-in"
+        class="input"
+        value="${A.claim.date}"
+        max="${today()}"
+        oninput="A.claim.date=this.value"
+        style="margin-bottom:12px;"
+        aria-label="Date"
+      />
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" style="font-size:12px;padding:9px;" onclick="setDate(0)">Today</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:9px;" onclick="setDate(1)">Yesterday</button>
+      </div>
+    </div>
+    <div style="padding:0 16px;">
+      <button class="btn btn-green" onclick="fromDate()">Next &rarr;</button>
+    </div>`;
+}
+
+function setDate(n) {
+  const d = new Date(); d.setDate(d.getDate() - n);
+  A.claim.date = d.toISOString().split('T')[0];
+  const el = document.getElementById('date-in');
+  if (el) el.value = A.claim.date;
+}
+
+function fromDate() {
+  const el = document.getElementById('date-in');
+  if (el) A.claim.date = el.value;
+  go(pfx() + '_desc');
+}
+
+/* ================================================================
+   SCREEN: DESCRIPTION (step 4)
+================================================================ */
+function renderDesc() {
+  return `
+    ${hdr("What's it for?", pfx()+'_date', 4, 4)}
+    <div style="padding:20px 16px;">
+      <textarea
+        id="desc-in"
+        class="input"
+        style="height:80px;"
+        placeholder="Brief description, e.g. dinner out, taxi, petrol…"
+        oninput="A.claim.desc=this.value"
+        aria-label="Description"
+      >${esc(A.claim.desc)}</textarea>
+    </div>
+    <div style="padding:0 16px;">
+      <button class="btn btn-green" onclick="fromDesc()">Review claim &rarr;</button>
+    </div>`;
+}
+
+function fromDesc() {
+  const el = document.getElementById('desc-in');
+  if (el) A.claim.desc = el.value;
+  go(pfx() + '_conf');
+}
+
+/* ================================================================
+   SCREEN: CONFIRM
+================================================================ */
+function renderConfirm() {
+  const io      = A.claim.type === 'ioowe';
+  const amtCol  = io ? 'var(--red-600)' : 'var(--green-600)';
+  const whoLbl  = io ? 'Who you owe' : 'Who owes you';
+  const msg     = io
+    ? `You're telling ${esc(A.claim.personName)} you owe them ${fmt(A.claim.amount)}.`
+    : `You're telling ${esc(A.claim.personName)} they owe you ${fmt(A.claim.amount)}.`;
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('${pfx()}_desc')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Confirm &amp; send</span>
+    </div>
+    <div style="padding:16px;">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-row">
+          <span class="card-key">${whoLbl}</span>
+          <span class="card-val">${esc(A.claim.personName)}</span>
+        </div>
+        <div class="card-row">
+          <span class="card-key">Amount</span>
+          <span class="card-val" style="color:${amtCol};font-size:20px;">${fmt(A.claim.amount)}</span>
+        </div>
+        <div class="card-row">
+          <span class="card-key">Date</span>
+          <span class="card-val">${fmtDate(A.claim.date)}</span>
+        </div>
+        <div class="card-row">
+          <span class="card-key">Description</span>
+          <span class="card-val">${esc(A.claim.desc) || '<span style="color:var(--text-3);">None</span>'}</span>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--text-2);text-align:center;line-height:1.7;margin-bottom:16px;">
+        ${msg}<br>
+        They'll be notified and can accept, query, or reject.
+      </p>
+      <button class="btn btn-green" style="padding:14px;" onclick="sendClaim()">Send claim</button>
+    </div>`;
+}
+
+async function sendClaim() {
+  const io       = A.claim.type === 'ioowe';
+  const credUid  = io ? A.claim.personId           : A.user.uid;
+  const credName = io ? A.claim.personName          : (A.userDoc?.displayName || A.user.displayName);
+  const debtUid  = io ? A.user.uid                 : A.claim.personId;
+  const debtName = io ? (A.userDoc?.displayName || A.user.displayName) : A.claim.personName;
+
+  try {
+    await db.collection('claims').add({
+      creditorUid:  credUid,
+      creditorName: credName,
+      debtorUid:    debtUid,
+      debtorName:   debtName,
+      amount:       parseFloat(A.claim.amount),
+      currency:     'GBP',
+      description:  A.claim.desc,
+      date:         A.claim.date,
+      type:         A.claim.type,
+      status:       'pending',
+      counterAmount:   null,
+      counterComment:  null,
+      participants:    [credUid, debtUid],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    go(pfx() + '_sent');
+  } catch (e) {
+    alert('Error sending claim. Please try again.\n\n' + e.message);
+  }
+}
+
+/* ================================================================
+   SCREEN: SENT SUCCESS
+================================================================ */
+function renderSent() {
+  const io = A.claim.type === 'ioowe';
+  return `
+    <div class="success-screen">
+      ${sheepSvg(72)}
+      <div style="font-size:22px;font-weight:500;">Claim sent!</div>
+      <div style="font-size:14px;color:var(--text-2);line-height:1.8;">
+        ${esc(A.claim.personName)} has been notified that
+        ${io ? 'you owe them' : 'they owe you'}
+        <strong>${fmt(A.claim.amount)}</strong>.<br>
+        You'll hear back once they respond.
+      </div>
+      <button class="btn btn-green" style="margin-top:16px;padding:13px;" onclick="go('home')">Back to home</button>
+    </div>`;
+}
+
+/* ================================================================
+   SCREEN: INCOMING CLAIM DETAIL
+================================================================ */
+function viewClaim(id) {
+  A.selectedClaimId = id;
+  go('req_detail');
+}
+
+function renderReqDetail() {
+  const all   = [...A.pendingClaims, ...A.sentClaims, ...A.ledger];
+  const claim = all.find(c => c.id === A.selectedClaimId);
+  if (!claim) return `<div class="empty">Claim not found.</div>`;
+
+  const iAmDebtor   = claim.debtorUid   === A.user.uid;
+  const iAmCreditor = claim.creditorUid === A.user.uid;
+  const isIncoming  = iAmDebtor && claim.status === 'pending';
+  const counterPendingOnMe = iAmCreditor && claim.status === 'queried';
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('home')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">${isIncoming ? 'Incoming claim' : 'Claim detail'}</span>
+    </div>
+    <div style="padding:16px 16px 0;">
+      <div style="text-align:center;padding:16px 0 20px;">
+        <div style="font-size:13px;color:var(--text-2);">
+          ${esc(claim.creditorName)} says ${iAmDebtor ? 'you owe' : 'they are owed'}
+        </div>
+        <div style="font-size:48px;font-weight:500;margin-top:4px;">${fmt(claim.amount)}</div>
+        ${claim.status === 'queried'
+          ? `<div style="font-size:13px;color:var(--amber-700);margin-top:8px;">Counter-offer: ${fmt(claim.counterAmount)}</div>`
+          : ''}
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-row"><span class="card-key">From</span>    <span class="card-val">${esc(claim.creditorName)}</span></div>
+        <div class="card-row"><span class="card-key">To</span>      <span class="card-val">${esc(claim.debtorName)}</span></div>
+        <div class="card-row"><span class="card-key">Date</span>    <span class="card-val">${fmtDate(claim.date)}</span></div>
+        <div class="card-row"><span class="card-key">For</span>     <span class="card-val">${esc(claim.description) || '—'}</span></div>
+        ${claim.counterComment
+          ? `<div class="card-row"><span class="card-key">Comment</span><span class="card-val">${esc(claim.counterComment)}</span></div>`
+          : ''}
+        <div class="card-row"><span class="card-key">Status</span> <span class="card-val">${tagForStatus(claim.status)}</span></div>
+      </div>
+    </div>
+
+    ${isIncoming ? `
+      <div style="padding:0 16px;display:flex;flex-direction:column;gap:9px;">
+        <button class="btn btn-green" style="padding:13px;" onclick="acceptClaim('${claim.id}')">Yes, that's right &#10003;</button>
+        <button class="btn btn-amber" style="padding:13px;" onclick="go('q_form')">Query the amount</button>
+        <button class="btn btn-red"   style="padding:13px;" onclick="rejectClaim('${claim.id}')">Reject this claim</button>
+      </div>` : ''}
+
+    ${counterPendingOnMe ? `
+      <div style="padding:0 16px;display:flex;flex-direction:column;gap:9px;">
+        <p style="font-size:13px;color:var(--text-2);text-align:center;margin-bottom:4px;">
+          ${esc(claim.debtorName)} has proposed ${fmt(claim.counterAmount)}.
+        </p>
+        <button class="btn btn-green" style="padding:13px;" onclick="acceptCounter('${claim.id}',${claim.counterAmount})">Accept counter-offer</button>
+        <button class="btn btn-red"   style="padding:13px;" onclick="rejectClaim('${claim.id}')">Reject counter-offer</button>
+      </div>` : ''}`;
+}
+
+async function acceptClaim(id) {
+  try {
+    await db.collection('claims').doc(id).update({
+      status:    'accepted',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    go('home');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function acceptCounter(id, counterAmount) {
+  try {
+    await db.collection('claims').doc(id).update({
+      status:    'accepted',
+      amount:    parseFloat(counterAmount),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    go('home');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function rejectClaim(id) {
+  try {
+    await db.collection('claims').doc(id).update({
+      status:    'rejected',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    go('home');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+/* ================================================================
+   SCREEN: QUERY / COUNTER-OFFER
+================================================================ */
+function renderQueryForm() {
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('req_detail')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Query the amount</span>
+    </div>
+    <div style="padding:20px 16px;">
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6;">
+        You're agreeing the debt exists but proposing a different amount.
+        They'll need to accept or reject your counter.
+      </p>
+      <label class="field-label">Amount you agree to (&pound;)</label>
+      <input
+        type="number"
+        id="q-amt"
+        class="input"
+        placeholder="0.00"
+        step="0.01"
+        inputmode="decimal"
+        value="${esc(A.query.amount)}"
+        oninput="A.query.amount=this.value"
+        style="margin-bottom:14px;"
+        aria-label="Counter amount"
+      />
+      <label class="field-label">Comments <span style="color:var(--text-3);">(optional)</span></label>
+      <textarea
+        id="q-cmt"
+        class="input"
+        style="height:68px;"
+        placeholder="e.g. I only had the starter, not the main…"
+        oninput="A.query.comment=this.value"
+        aria-label="Comment"
+      >${esc(A.query.comment)}</textarea>
+    </div>
+    <div style="padding:0 16px;">
+      <button class="btn btn-amber" style="padding:13px;" onclick="sendQuery()">Send counter-offer</button>
+    </div>`;
+}
+
+async function sendQuery() {
+  const qa = document.getElementById('q-amt'); if (qa) A.query.amount  = qa.value;
+  const qc = document.getElementById('q-cmt'); if (qc) A.query.comment = qc.value;
+
+  if (!A.query.amount || parseFloat(A.query.amount) <= 0) {
+    const el = document.getElementById('q-amt');
+    if (el) el.style.borderColor = '#E24B4A';
+    return;
+  }
+
+  try {
+    await db.collection('claims').doc(A.selectedClaimId).update({
+      status:         'queried',
+      counterAmount:  parseFloat(A.query.amount),
+      counterComment: A.query.comment || null,
+      updatedAt:      firebase.firestore.FieldValue.serverTimestamp()
+    });
+    go('q_sent');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function renderQuerySent() {
+  return `
+    <div class="success-screen">
+      <svg width="64" height="64" viewBox="0 0 60 60" fill="none" aria-hidden="true">
+        <circle cx="30" cy="30" r="28" fill="#FAEEDA" stroke="#FAC775" stroke-width="1.5"/>
+        <text x="30" y="39" text-anchor="middle" font-size="26" fill="#633806">?</text>
+      </svg>
+      <div style="font-size:20px;font-weight:500;">Counter sent</div>
+      <div style="font-size:14px;color:var(--text-2);line-height:1.8;">
+        You've proposed <strong>${fmt(A.query.amount)}</strong> instead.<br>
+        They'll be notified and can accept or reject.
+      </div>
+      <button class="btn btn-green" style="margin-top:16px;padding:13px;" onclick="go('home')">Back to home</button>
+    </div>`;
+}
+
+/* ================================================================
+   SCREEN: MY POSITION
+================================================================ */
+function renderPosition() {
+  // Build a balance map: positive = they owe me, negative = I owe them
+  const bals = {};
+  A.connections.forEach(c => { bals[c.id] = { name: c.name, color: c.color, bal: 0 }; });
+
+  A.ledger.forEach(claim => {
+    if (claim.creditorUid === A.user.uid && bals[claim.debtorUid]) {
+      bals[claim.debtorUid].bal += claim.amount;
+    } else if (claim.debtorUid === A.user.uid && bals[claim.creditorUid]) {
+      bals[claim.creditorUid].bal -= claim.amount;
+    }
+  });
+
+  const items  = Object.entries(bals).filter(([,v]) => Math.abs(v.bal) >= 0.01).map(([id,v]) => ({id,...v}));
+  const owed   = items.filter(i => i.bal > 0).reduce((s, i) => s + i.bal, 0);
+  const owing  = items.filter(i => i.bal < 0).reduce((s, i) => s + Math.abs(i.bal), 0);
+
+  return `
+    <div style="padding:16px 16px 4px;">
+      <div style="font-size:17px;font-weight:500;margin-bottom:14px;">My position</div>
+      <div class="balance-grid">
+        <div class="balance-card green">
+          <div class="balance-label">Owed to you</div>
+          <div class="balance-amount">${fmt(owed)}</div>
+        </div>
+        <div class="balance-card red">
+          <div class="balance-label">You owe</div>
+          <div class="balance-amount">${fmt(owing)}</div>
+        </div>
+      </div>
+    </div>
+    <hr class="divider">
+    ${items.length === 0
+      ? `<div class="empty">All square &mdash; no outstanding debts.</div>`
+      : items.map(i => `
+          <div class="list-item" onclick="viewPersonPos('${esc(i.id)}')">
+            <div class="avatar ${i.color || ''}">${initials(i.name)}</div>
+            <div style="flex:1;">
+              <div style="font-size:15px;font-weight:500;">${esc(i.name)}</div>
+              <div style="font-size:12px;color:var(--text-2);">${i.bal > 0 ? 'owes you' : 'you owe'}</div>
+            </div>
+            <div style="font-size:16px;font-weight:500;color:${i.bal > 0 ? 'var(--green-600)' : 'var(--red-600)'};">
+              ${fmt(Math.abs(i.bal))}
+            </div>
+            <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
+          </div>`).join('')
+    }`;
+}
+
+function viewPersonPos(id) { A.selectedPersonId = id; go('pos_detail'); }
+
+/* ================================================================
+   SCREEN: POSITION DETAIL (per-person)
+================================================================ */
+function renderPosDetail() {
+  const person = A.connections.find(c => c.id === A.selectedPersonId);
+  if (!person) return `<div class="empty">Person not found.</div>`;
+
+  const entries = A.ledger.filter(c =>
+    (c.creditorUid === A.user.uid && c.debtorUid   === A.selectedPersonId) ||
+    (c.creditorUid === A.selectedPersonId && c.debtorUid === A.user.uid)
+  ).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('position')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">${esc(person.name)}</span>
+    </div>
+    ${entries.length === 0
+      ? `<div class="empty">No settled transactions with ${esc(person.name)} yet.</div>`
+      : entries.map(e => {
+          const iCr = e.creditorUid === A.user.uid;
+          return `
+            <div style="padding:13px 16px;border-bottom:0.5px solid var(--border);">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px;">
+                <span style="font-size:14px;font-weight:500;flex:1;min-width:0;">${esc(e.description) || 'No description'}</span>
+                <span style="font-size:15px;font-weight:500;flex-shrink:0;color:${iCr ? 'var(--green-600)' : 'var(--red-600)'};">
+                  ${iCr ? '+' : '-'}${fmt(e.amount)}
+                </span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:12px;color:var(--text-2);">${fmtDate(e.date)}</span>
+                <span class="tag tag-green">Settled</span>
+              </div>
+            </div>`;
+        }).join('')
+    }`;
+}
+
+/* ================================================================
+   SCREEN: SETTINGS
+================================================================ */
+function renderSettings() {
+  return `
+    <div style="padding:16px 16px 12px;">
+      <div style="font-size:17px;font-weight:500;margin-bottom:16px;">Settings</div>
+    </div>
+    <hr class="divider">
+    <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">Signed in as</div>
+      <div style="font-size:15px;font-weight:500;">${esc(A.user?.displayName || '')}</div>
+      <div style="font-size:13px;color:var(--text-2);">${esc(A.user?.email || '')}</div>
+    </div>
+    <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:15px;margin-bottom:10px;">My connections (${A.connections.length})</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        ${A.connections.map(c =>
+          `<div class="avatar ${c.color||''}" style="width:34px;height:34px;font-size:11px;" title="${esc(c.name)}">${initials(c.name)}</div>`
+        ).join('') || `<span style="font-size:13px;color:var(--text-2);">None yet</span>`}
+      </div>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
+    </div>
+    <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:15px;margin-bottom:2px;">Currency</div>
+      <div style="font-size:13px;color:var(--text-2);">GBP (&pound;) &mdash; British Pounds</div>
+    </div>
+    <div style="padding:14px 16px;">
+      <button class="btn btn-red" onclick="doSignOut()">Sign out</button>
+    </div>`;
+}
+
+/* ================================================================
+   SCREEN: NEW CONNECTION
+================================================================ */
+function renderNewConn() {
+  const back = A.claim.type ? pfx()+'_who' : 'settings';
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('${back}')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">New connection</span>
+    </div>
+    <div style="padding:20px 16px;">
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6;">
+        Enter the name and Google email address of the person you want to connect with.
+        They'll need to have signed in to EweOMe at least once first.
+      </p>
+      <label class="field-label">Their name</label>
+      <input type="text"  id="nc-name"  class="input" placeholder="Full name"          style="margin-bottom:14px;" aria-label="Name"/>
+      <label class="field-label">Their email address</label>
+      <input type="email" id="nc-email" class="input" placeholder="name@example.com"   aria-label="Email address"/>
+    </div>
+    <div style="padding:0 16px;">
+      <button class="btn btn-green" style="padding:13px;" onclick="addConnection()">Add connection</button>
+    </div>`;
+}
+
+async function addConnection() {
+  const nameEl  = document.getElementById('nc-name');
+  const emailEl = document.getElementById('nc-email');
+  const name    = nameEl?.value.trim();
+  const email   = emailEl?.value.trim().toLowerCase();
+
+  if (!name || !email) {
+    if (nameEl)  nameEl.style.borderColor  = '#E24B4A';
+    if (emailEl) emailEl.style.borderColor = '#E24B4A';
+    return;
+  }
+
+  try {
+    // Look up whether they've already registered
+    const snap    = await db.collection('users_by_email').doc(email).get();
+    const theirUid = snap.exists ? snap.data().uid : null;
+
+    const conn = {
+      id:      theirUid || ('pending_' + Date.now()),
+      name,
+      email,
+      uid:     theirUid,
+      color:   A.connections.length % 2 === 0 ? '' : 'amber',
+      addedAt: new Date().toISOString()
+    };
+
+    const updated = [...A.connections.filter(c => c.email !== email), conn];
+    await db.collection('users').doc(A.user.uid).update({ connections: updated });
+    A.connections = updated;
+
+    if (A.claim.type) {
+      A.claim.personId   = conn.id;
+      A.claim.personName = conn.name;
+      go(pfx() + '_amt');
+    } else {
+      go('settings');
+    }
+  } catch(e) {
+    alert('Error adding connection.\n\n' + e.message);
+  }
+}
+
+/* ================================================================
+   FIREBASE AUTH
+================================================================ */
+async function signIn() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    await auth.signInWithPopup(provider);
+  } catch(e) {
+    if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user') {
+      await auth.signInWithRedirect(provider);
+    } else {
+      alert('Sign-in failed: ' + e.message);
+    }
+  }
+}
+
+function doSignOut() {
+  A._unsubs.forEach(fn => fn());
+  A._unsubs = [];
+  auth.signOut();
+}
+
+/* ================================================================
+   FIRESTORE: USER SETUP
+================================================================ */
+async function ensureUserDoc(fbUser) {
+  const ref  = db.collection('users').doc(fbUser.uid);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    const data = {
+      displayName: fbUser.displayName,
+      email:       fbUser.email,
+      photoURL:    fbUser.photoURL || null,
+      connections: [],
+      createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+    };
+    await ref.set(data);
+    // Email → UID index so others can look you up when adding connections
+    await db.collection('users_by_email')
+      .doc(fbUser.email.toLowerCase())
+      .set({ uid: fbUser.uid, displayName: fbUser.displayName });
+  }
+}
+
+/* ================================================================
+   FIRESTORE: REAL-TIME LISTENERS
+================================================================ */
+function subscribeToData(uid) {
+  // Clean up previous listeners
+  A._unsubs.forEach(fn => fn());
+  A._unsubs = [];
+
+  // User doc (connections)
+  const u1 = db.collection('users').doc(uid)
+    .onSnapshot(snap => {
+      if (snap.exists) {
+        A.userDoc      = snap.data();
+        A.connections  = snap.data().connections || [];
+      }
+      if (!['loading','signin'].includes(A.screen)) render();
+    });
+  A._unsubs.push(u1);
+
+  // All claims involving this user — real-time
+  const u2 = db.collection('claims')
+    .where('participants', 'array-contains', uid)
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Incoming & needs my action: I'm debtor + status pending,
+      //   OR I'm creditor + status queried (their counter waiting on me)
+      A.pendingClaims = all.filter(c =>
+        (c.status === 'pending'  && c.debtorUid   === uid) ||
+        (c.status === 'queried'  && c.creditorUid === uid)
+      );
+
+      // Outgoing awaiting response
+      A.sentClaims = all.filter(c =>
+        (c.status === 'pending'  && c.creditorUid === uid) ||
+        (c.status === 'queried'  && c.debtorUid   === uid)
+      );
+
+      // Settled ledger
+      A.ledger = all.filter(c => c.status === 'accepted');
+
+      if (!['loading','signin'].includes(A.screen)) render();
+    });
+  A._unsubs.push(u2);
+}
+
+/* ================================================================
+   BOOTSTRAP
+================================================================ */
+auth.onAuthStateChanged(async fbUser => {
+  if (fbUser) {
+    A.user = fbUser;
+    await ensureUserDoc(fbUser);
+    subscribeToData(fbUser.uid);
+    go('home');
+  } else {
+    A.user        = null;
+    A.userDoc     = null;
+    A.connections = [];
+    A.pendingClaims = A.sentClaims = A.ledger = [];
+    go('signin');
+  }
+});
+
+// Handle Google redirect result on page load (mobile fallback)
+auth.getRedirectResult().catch(e => console.warn('Redirect auth error:', e));
+
+// Initial paint while Firebase checks auth state
+render();
+</script>
+</body>
+</html>
