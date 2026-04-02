@@ -1152,17 +1152,20 @@ function renderQuerySent() {
    SCREEN: MY POSITION
 ================================================================ */
 function renderPosition() {
-  // Build a balance map: positive = they owe me, negative = I owe them
+  // Build balance map directly from ledger - works even without connections
   const bals = {};
-  A.connections.forEach(c => { bals[c.id] = { name: c.name, color: c.color, bal: 0 }; });
-
   A.ledger.forEach(claim => {
-    if (claim.creditorUid === A.user.uid && bals[claim.debtorUid]) {
-      bals[claim.debtorUid].bal += claim.amount;
-    } else if (claim.debtorUid === A.user.uid && bals[claim.creditorUid]) {
-      bals[claim.creditorUid].bal -= claim.amount;
+    if (claim.creditorUid === A.user.uid) {
+      const id = claim.debtorUid;
+      if (!bals[id]) bals[id] = { name: claim.debtorName, bal: 0 };
+      bals[id].bal += claim.amount;
+    } else if (claim.debtorUid === A.user.uid) {
+      const id = claim.creditorUid;
+      if (!bals[id]) bals[id] = { name: claim.creditorName, bal: 0 };
+      bals[id].bal -= claim.amount;
     }
   });
+  A.connections.forEach(c => { if (bals[c.id]) bals[c.id].color = c.color; });
 
   const items  = Object.entries(bals).filter(([,v]) => Math.abs(v.bal) >= 0.01).map(([id,v]) => ({id,...v}));
   const owed   = items.filter(i => i.bal > 0).reduce((s, i) => s + i.bal, 0);
@@ -1206,8 +1209,13 @@ function viewPersonPos(id) { A.selectedPersonId = id; go('pos_detail'); }
    SCREEN: POSITION DETAIL (per-person)
 ================================================================ */
 function renderPosDetail() {
-  const person = A.connections.find(c => c.id === A.selectedPersonId);
-  if (!person) return `<div class="empty">Person not found.</div>`;
+  const personId = A.selectedPersonId;
+  // Find name from connections or fall back to ledger
+  const conn = A.connections.find(c => c.id === personId);
+  const ledgerEntry = A.ledger.find(c => c.creditorUid === personId || c.debtorUid === personId);
+  const personName = conn ? conn.name : (ledgerEntry ? (ledgerEntry.creditorUid === personId ? ledgerEntry.creditorName : ledgerEntry.debtorName) : 'Unknown');
+  const person = { id: personId, name: personName };
+  if (!personId) return `<div class="empty">Person not found.</div>`;
 
   const entries = A.ledger.filter(c =>
     (c.creditorUid === A.user.uid && c.debtorUid   === A.selectedPersonId) ||
