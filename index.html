@@ -463,7 +463,8 @@ const A = {
   screen:         'loading',
 
   // Claim being assembled step-by-step
-  claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '', onAccount: false, recipients: [] },
+  claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '', onAccount: false, recipients: [], recurring: false, recurrence: { freq: 'weekly', day: 'Monday', dayOfMonth: 1 } },
+  dueClaims: [],
 
   // Counter-offer being assembled
   query: { amount: '', comment: '' },
@@ -672,6 +673,7 @@ function render() {
     pos_detail: renderPosDetail,
     pos_history: renderPosHistory,
     simplify:    renderSimplify,
+    recurring:   renderRecurring,
     reject_form: renderRejectForm,
     pending:    renderPending,
     settings:   renderSettings,
@@ -751,6 +753,10 @@ function renderSignIn() {
    SCREEN: HOME
 ================================================================ */
 function renderHome() {
+  checkDueClaims();
+  if (A.dueClaims.length > 0 && A.screen === 'home') {
+    setTimeout(() => go('recurring'), 400);
+  }
   const pending  = A.pendingClaims;
   const hp       = pending.length > 0;
   const p        = pending[0];
@@ -984,7 +990,7 @@ function renderDesc() {
         aria-label="Description"
       >${esc(A.claim.desc)}</textarea>
     </div>
-    <div style="padding:0 16px 16px;">
+    <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
         <input type="checkbox" id="on-acct" style="width:18px;height:18px;accent-color:#3B6D11;" ${A.claim.onAccount?"checked":""} onchange="A.claim.onAccount=this.checked"/>
         <div>
@@ -992,6 +998,37 @@ function renderDesc() {
           <div style="font-size:12px;color:var(--text-2);margin-top:2px;">No rush to pay — this can sit until convenient</div>
         </div>
       </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
+        <input type="checkbox" id="recurring" style="width:18px;height:18px;accent-color:#3B6D11;" ${A.claim.recurring?"checked":""} onchange="A.claim.recurring=this.checked;render()"/>
+        <div>
+          <div style="font-size:14px;font-weight:500;">Recurring request</div>
+          <div style="font-size:12px;color:var(--text-2);margin-top:2px;">Prompt me to re-send this on a schedule</div>
+        </div>
+      </label>
+      ${A.claim.recurring ? `
+        <div style="padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <label class="field-label">Frequency</label>
+            <select id="rec-freq" class="input" onchange="A.claim.recurrence.freq=this.value;render()">
+              <option value="weekly"     ${A.claim.recurrence.freq==='weekly'     ?'selected':''}>Weekly</option>
+              <option value="fortnightly"${A.claim.recurrence.freq==='fortnightly'?'selected':''}>Fortnightly</option>
+              <option value="monthly"    ${A.claim.recurrence.freq==='monthly'    ?'selected':''}>Monthly</option>
+            </select>
+          </div>
+          ${A.claim.recurrence.freq === 'monthly' ? `
+            <div>
+              <label class="field-label">Day of month</label>
+              <select id="rec-dom" class="input" onchange="A.claim.recurrence.dayOfMonth=parseInt(this.value)">
+                ${Array.from({length:28},(_,i)=>'<option value="'+(i+1)+'" '+(A.claim.recurrence.dayOfMonth===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')}
+              </select>
+            </div>` : `
+            <div>
+              <label class="field-label">Day of week</label>
+              <select id="rec-day" class="input" onchange="A.claim.recurrence.day=this.value">
+                ${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d=>'<option value="'+d+'" '+(A.claim.recurrence.day===d?'selected':'')+'>'+d+'</option>').join('')}
+              </select>
+            </div>`}
+        </div>` : ""}
     </div>
     <div style="padding:0 16px;">
       <button class="btn btn-green" onclick="fromDesc()">Review claim &rarr;</button>
@@ -1059,6 +1096,8 @@ async function sendMultiClaim() {
       debtorUid: r.id, debtorName: r.name,
       amount: parseFloat(A.claim.amount), currency: 'GBP',
       onAccount: A.claim.onAccount || false,
+      recurring: A.claim.recurring || false,
+      recurrence: A.claim.recurring ? A.claim.recurrence : null,
       description: A.claim.desc, date: A.claim.date,
       type: 'eweome', status: 'pending',
       counterAmount: null, counterComment: null,
@@ -1107,6 +1146,8 @@ async function sendClaim() {
       amount:       parseFloat(A.claim.amount),
       currency:     'GBP',
       onAccount:    A.claim.onAccount || false,
+      recurring:    A.claim.recurring || false,
+      recurrence:   A.claim.recurring ? A.claim.recurrence : null,
       description:  A.claim.desc,
       date:         A.claim.date,
       type:         A.claim.type,
@@ -1114,6 +1155,7 @@ async function sendClaim() {
       counterAmount:   null,
       counterComment:  null,
       participants:    [credUid, debtUid],
+      nextDue: A.claim.recurring ? nextDueDate(A.claim.recurrence, A.claim.date) : null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -1581,6 +1623,114 @@ function renderPosDetail() {
             + settledHere.map(e => makeRow(e, true)).join('')
           : '')
     }`;
+}
+
+/* ================================================================
+   RECURRING CLAIMS
+================================================================ */
+function nextDueDate(recurrence, fromDate) {
+  const d = fromDate ? new Date(fromDate) : new Date();
+  if (recurrence.freq === 'weekly' || recurrence.freq === 'fortnightly') {
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const targetDay = days.indexOf(recurrence.day);
+    const step = recurrence.freq === 'fortnightly' ? 14 : 7;
+    const next = new Date(d);
+    next.setDate(next.getDate() + step);
+    const diff = (targetDay - next.getDay() + 7) % 7;
+    next.setDate(next.getDate() + diff);
+    return next.toISOString().split('T')[0];
+  } else {
+    const next = new Date(d);
+    next.setMonth(next.getMonth() + 1);
+    next.setDate(Math.min(recurrence.dayOfMonth, 28));
+    return next.toISOString().split('T')[0];
+  }
+}
+
+function checkDueClaims() {
+  const todayStr = today();
+  const all = [...A.ledger, ...A.settled];
+  A.dueClaims = all.filter(c =>
+    c.recurring && c.recurrence &&
+    c.creditorUid === A.user.uid &&
+    c.nextDue && c.nextDue <= todayStr &&
+    !c.dueDismissed
+  );
+}
+
+function renderRecurring() {
+  checkDueClaims();
+  const due = A.dueClaims;
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('home')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Recurring requests due</span>
+    </div>
+    <div style="padding:16px;">
+      <p style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:16px;">
+        These recurring requests are due. Tap to send each one — or dismiss if not needed this time.
+      </p>
+      ${due.map(c => `
+        <div style="padding:14px;background:var(--surface);border-radius:var(--radius-md);border:0.5px solid var(--border);margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+            <span style="font-size:14px;font-weight:500;">${esc(c.debtorName)}</span>
+            <span style="font-size:16px;font-weight:500;color:var(--green-600);">${fmt(c.amount)}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:10px;">${esc(c.description)||''} &middot; due ${fmtDate(c.nextDue)}</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-green" style="padding:9px;font-size:13px;" onclick="sendRecurring('${c.id}')">Send now</button>
+            <button class="btn btn-ghost" style="padding:9px;font-size:13px;" onclick="dismissDue('${c.id}')">Skip this time</button>
+          </div>
+        </div>`).join('')}
+      ${due.length === 0 ? '<div class="empty">No recurring requests due right now.</div>' : ''}
+    </div>`;
+}
+
+async function sendRecurring(originalId) {
+  const c = A.dueClaims.find(x => x.id === originalId);
+  if (!c) return;
+  try {
+    const nextDue = nextDueDate(c.recurrence, c.nextDue);
+    const batch = db.batch();
+    const newRef = db.collection('claims').doc();
+    batch.set(newRef, {
+      creditorUid: c.creditorUid, creditorName: c.creditorName,
+      debtorUid: c.debtorUid, debtorName: c.debtorName,
+      amount: c.amount, currency: 'GBP',
+      onAccount: c.onAccount || false,
+      recurring: true, recurrence: c.recurrence,
+      nextDue,
+      description: c.description, date: today(),
+      type: c.type, status: 'pending',
+      counterAmount: null, counterComment: null,
+      participants: [c.creditorUid, c.debtorUid],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    batch.update(db.collection('claims').doc(originalId), {
+      dueDismissed: true, nextDue,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await batch.commit();
+    checkDueClaims();
+    if (A.dueClaims.length > 0) render();
+    else go('home');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function dismissDue(originalId) {
+  const c = A.dueClaims.find(x => x.id === originalId);
+  if (!c) return;
+  try {
+    const nextDue = nextDueDate(c.recurrence, c.nextDue);
+    await db.collection('claims').doc(originalId).update({
+      dueDismissed: true, nextDue,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    checkDueClaims();
+    if (A.dueClaims.length > 0) render();
+    else go('home');
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 /* ================================================================
