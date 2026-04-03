@@ -1861,13 +1861,18 @@ function renderPending() {
         <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Waiting for response</div>
       </div>
       ${outgoing.map(c => {
-        return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
+        return '<div style="border-bottom:0.5px solid var(--border)">'
+          + '<div class="list-item" style="border-bottom:none;" onclick="viewClaim(\'' + c.id + '\')">' 
           + '<div class="avatar">' + initials(c.debtorName) + '</div>'
           + '<div style="flex:1;min-width:0;">'
           + '<div style="font-size:14px;font-weight:500;">You claimed ' + fmt(c.amount) + ' from ' + esc(c.debtorName) + '</div>'
-          + '<div style="font-size:12px;color:var(--text-2);">' + (c.description ? esc(c.description) + ' · ' : '') + fmtDate(c.date) + '</div>'
+          + '<div style="font-size:12px;color:var(--text-2);">' + (c.description ? esc(c.description) + ' \u00b7 ' : '') + fmtDate(c.date) + '</div>'
           + '</div>'
-          + '<span class="tag tag-amber" style="flex-shrink:0;">Waiting</span></div>';
+          + '<span class="tag tag-amber" style="flex-shrink:0;">Waiting</span>'
+          + '</div>'
+          + '<div style="padding:0 16px 10px;">'
+          + '<button onclick="event.stopPropagation();cancelClaim(\'' + c.id + '\')" class="btn btn-red" style="padding:7px;font-size:12px;">Cancel request</button>'
+          + '</div></div>';
       }).join('')}
     ` : ''}
     ${incoming.length === 0 && outgoing.length === 0 ? '<div class="empty">Nothing pending — all caught up!</div>' : ''}`;
