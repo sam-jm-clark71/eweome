@@ -465,6 +465,7 @@ const A = {
   // Claim being assembled step-by-step
   claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '', onAccount: false, recipients: [], recurring: false, recurrence: { freq: 'weekly', day: 'Monday', dayOfMonth: 1 } },
   dueClaims: [],
+  confirmCancelId: null,
 
   // Counter-offer being assembled
   query: { amount: '', comment: '' },
@@ -1247,6 +1248,19 @@ function renderReqDetail() {
         <button class="btn btn-red"   style="padding:13px;" onclick="rejectClaim('${claim.id}')">Reject counter-offer</button>
       </div>` : ''}
 
+    ${claim.status === 'pending' && iAmCreditor ? `
+      <div style="padding:12px 16px 0;border-top:0.5px solid var(--border);margin-top:4px;">
+        <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.6;">Sent by mistake? You can cancel this request.</p>
+        ${A.confirmCancelId === claim.id
+          ? `<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">
+              <div style="font-size:13px;color:var(--red-600);margin-bottom:8px;">Cancel this request?</div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="confirmCancelClaim()" class="btn btn-red" style="padding:9px;">Yes, cancel it</button>
+                <button onclick="abortCancelClaim()" class="btn btn-ghost" style="padding:9px;">Keep it</button>
+              </div></div>`
+          : `<button class="btn btn-red" style="padding:11px;" onclick="cancelClaim('${claim.id}')">Cancel this request</button>`}
+      </div>` : ''}
+
     ${(claim.status === 'agreed' || claim.status === 'accepted') ? `
       <div style="padding:12px 16px 0;border-top:0.5px solid var(--border);margin-top:4px;">
         <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.6;">
@@ -1362,6 +1376,28 @@ async function confirmReject(id) {
     });
     goNextPending();
   } catch(e) { alert('Error: ' + e.message); }
+}
+
+function cancelClaim(id) {
+  A.confirmCancelId = id;
+  render();
+}
+
+async function confirmCancelClaim() {
+  const id = A.confirmCancelId;
+  A.confirmCancelId = null;
+  try {
+    await db.collection('claims').doc(id).update({
+      status: 'cancelled',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    go('pending');
+  } catch(e) { go('pending'); }
+}
+
+function abortCancelClaim() {
+  A.confirmCancelId = null;
+  render();
 }
 
 async function dismissRejected(id) {
@@ -1866,12 +1902,20 @@ function renderPending() {
           + '<div class="avatar">' + initials(c.debtorName) + '</div>'
           + '<div style="flex:1;min-width:0;">'
           + '<div style="font-size:14px;font-weight:500;">You claimed ' + fmt(c.amount) + ' from ' + esc(c.debtorName) + '</div>'
-          + '<div style="font-size:12px;color:var(--text-2);">' + (c.description ? esc(c.description) + ' \u00b7 ' : '') + fmtDate(c.date) + '</div>'
+          + '<div style="font-size:12px;color:var(--text-2);">' + (c.description ? esc(c.description) + ' · ' : '') + fmtDate(c.date) + '</div>'
           + '</div>'
           + '<span class="tag tag-amber" style="flex-shrink:0;">Waiting</span>'
           + '</div>'
           + '<div style="padding:0 16px 10px;">'
-          + '<button onclick="event.stopPropagation();cancelClaim(\'' + c.id + '\')" class="btn btn-red" style="padding:7px;font-size:12px;">Cancel request</button>'
+          + (A.confirmCancelId === c.id
+            ? '<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">'
+              + '<div style="font-size:13px;color:var(--red-600);margin-bottom:8px;">Cancel this request?</div>'
+              + '<div style="display:flex;gap:8px;">'
+              + '<button onclick="confirmCancelClaim()" class="btn btn-red" style="padding:7px;font-size:12px;">Yes, cancel it</button>'
+              + '<button onclick="abortCancelClaim()" class="btn btn-ghost" style="padding:7px;font-size:12px;">Keep it</button>'
+              + '</div></div>'
+            : '<button onclick="cancelClaim(\'' + c.id + '\')" class="btn btn-red" style="padding:7px;font-size:12px;">Cancel request</button>'
+          )
           + '</div></div>';
       }).join('')}
     ` : ''}
@@ -2076,8 +2120,9 @@ function subscribeToData(uid) {
 
       // Outgoing awaiting response
       A.sentClaims = all.filter(c =>
-        (c.status === 'pending'  && c.creditorUid === uid) ||
-        (c.status === 'queried'  && c.debtorUid   === uid)
+        ((c.status === 'pending'  && c.creditorUid === uid) ||
+        (c.status === 'queried'  && c.debtorUid   === uid)) &&
+        c.status !== 'cancelled'
       );
 
       // Outstanding agreed debts
