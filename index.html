@@ -461,6 +461,11 @@ const A = {
   user:           null,   // Firebase auth user object
   userDoc:        null,   // Firestore /users/{uid} document
   screen:         'loading',
+  signinMode:     'choose',
+  phoneStep:      'number',
+  phoneNumber:    '',
+  signinError:    '',
+  _phoneVerifier: null,
 
   // Claim being assembled step-by-step
   claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '', onAccount: false, recipients: [], recurring: false, recurrence: { freq: 'weekly', day: 'Monday', dayOfMonth: 1 } },
@@ -734,20 +739,47 @@ function renderLoading() {
    SCREEN: SIGN IN
 ================================================================ */
 function renderSignIn() {
+  const mode = A.signinMode || 'choose';
   return `
     <div class="signin-screen">
       ${sheepSvg(80)}
       <div>
-        <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:42px;letter-spacing:0.01em;color:var(--green-600);">eweome</h1>
+        <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:42px;letter-spacing:0.01em;color:var(--green-600);display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</h1>
         <p style="font-size:13px;color:var(--text-2);margin-top:6px;">Log it. Track it. Settle it.</p>
       </div>
-      <p style="font-size:14px;color:var(--text-2);max-width:260px;line-height:1.7;">
-        Track money owed between family and friends — simply and honestly.
-      </p>
-      <button class="google-btn" onclick="signIn()">
-        ${googleIcon()}
-        Sign in with Google
-      </button>
+
+      ${mode === 'choose' ? `
+        <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;">
+          <button class="google-btn" onclick="signIn()">${googleIcon()} Sign in with Google</button>
+          <button class="google-btn" onclick="A.signinMode='email';render()">&#9993;&nbsp; Sign in with email</button>
+          <button class="google-btn" onclick="A.signinMode='phone';render()">&#128222;&nbsp; Sign in with phone</button>
+        </div>` : ''}
+
+      ${mode === 'email' ? `
+        <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
+          <input type="email" id="si-email" class="input" placeholder="Email address" aria-label="Email"/>
+          <input type="password" id="si-pass" class="input" placeholder="Password" aria-label="Password"/>
+          <button class="google-btn" onclick="signInEmail(false)">Sign in</button>
+          <button class="google-btn" onclick="signInEmail(true)">Create account</button>
+          <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.signinMode='choose';render()">&#8592; Back</button>
+        </div>` : ''}
+
+      ${mode === 'phone' ? `
+        <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
+          ${A.phoneStep === 'code' ? `
+            <p style="font-size:13px;color:var(--text-2);text-align:center;">Enter the code sent to ${esc(A.phoneNumber)}</p>
+            <input type="text" id="si-code" class="input" placeholder="6-digit code" inputmode="numeric" maxlength="6" aria-label="Verification code"/>
+            <button class="google-btn" onclick="verifyCode()">Verify</button>
+            <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.phoneStep='number';render()">&#8592; Back</button>
+          ` : `
+            <input type="tel" id="si-phone" class="input" placeholder="+44 7700 900000" inputmode="tel" aria-label="Phone number"/>
+            <div id="recaptcha-container"></div>
+            <button class="google-btn" onclick="signInPhone()">Send code</button>
+            <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.signinMode='choose';render()">&#8592; Back</button>
+          `}
+        </div>` : ''}
+
+      ${A.signinError ? `<p style="font-size:13px;color:var(--red-600);text-align:center;max-width:260px;">${esc(A.signinError)}</p>` : ''}
     </div>`;
 }
 
@@ -768,7 +800,7 @@ function renderHome() {
     <div style="padding:16px 16px 10px;display:flex;align-items:center;gap:12px;">
       ${sheepSvg(52)}
       <div style="flex:1;text-align:center;">
-        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;">ewe-o-me</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
       </div>
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
@@ -2051,7 +2083,8 @@ async function addConnection() {
 
   try {
     // Look up whether they've already registered
-    const snap    = await db.collection('users_by_email').doc(email).get();
+    const lookupKey = /^[+\d]/.test(email) ? email.replace(/\s/g,'') : email;
+    const snap    = await db.collection('users_by_email').doc(lookupKey).get();
     const theirUid = snap.exists ? snap.data().uid : null;
 
     const conn = {
@@ -2082,6 +2115,51 @@ async function addConnection() {
 /* ================================================================
    FIREBASE AUTH
 ================================================================ */
+async function signInEmail(isNew) {
+  A.signinError = '';
+  const email = document.getElementById('si-email')?.value.trim();
+  const pass  = document.getElementById('si-pass')?.value;
+  if (!email || !pass) { A.signinError = 'Please enter your email and password.'; render(); return; }
+  try {
+    if (isNew) { await auth.createUserWithEmailAndPassword(email, pass); }
+    else       { await auth.signInWithEmailAndPassword(email, pass); }
+  } catch(e) {
+    A.signinError = e.message.replace('Firebase: ','').replace(/ \(auth\/.*\)\.?/,'');
+    render();
+  }
+}
+
+async function signInPhone() {
+  A.signinError = '';
+  const phone = document.getElementById('si-phone')?.value.trim();
+  if (!phone) { A.signinError = 'Please enter your phone number.'; render(); return; }
+  try {
+    if (!A._phoneVerifier) {
+      A._phoneVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
+    }
+    A.phoneNumber = phone;
+    A._confirmResult = await auth.signInWithPhoneNumber(phone, A._phoneVerifier);
+    A.phoneStep = 'code';
+    render();
+  } catch(e) {
+    A.signinError = 'Could not send code. Check the number and try again.';
+    A._phoneVerifier = null;
+    render();
+  }
+}
+
+async function verifyCode() {
+  A.signinError = '';
+  const code = document.getElementById('si-code')?.value.trim();
+  if (!code) { A.signinError = 'Please enter the code.'; render(); return; }
+  try {
+    await A._confirmResult.confirm(code);
+  } catch(e) {
+    A.signinError = 'Incorrect code. Please try again.';
+    render();
+  }
+}
+
 async function signIn() {
   const provider = new firebase.auth.GoogleAuthProvider();
   try {
@@ -2098,6 +2176,7 @@ async function signIn() {
 function doSignOut() {
   A._unsubs.forEach(fn => fn());
   A._unsubs = [];
+  A.signinMode = 'choose'; A.phoneStep = 'number'; A.signinError = ''; A._phoneVerifier = null;
   auth.signOut();
 }
 
@@ -2109,18 +2188,22 @@ async function ensureUserDoc(fbUser) {
   const snap = await ref.get();
 
   if (!snap.exists) {
+    const displayName = fbUser.displayName || fbUser.email || fbUser.phoneNumber || 'User';
     const data = {
-      displayName: fbUser.displayName,
-      email:       fbUser.email,
-      photoURL:    fbUser.photoURL || null,
+      displayName,
+      email:    fbUser.email || null,
+      phone:    fbUser.phoneNumber || null,
+      photoURL: fbUser.photoURL || null,
       connections: [],
-      createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     await ref.set(data);
-    // Email → UID index so others can look you up when adding connections
-    await db.collection('users_by_email')
-      .doc(fbUser.email.toLowerCase())
-      .set({ uid: fbUser.uid, displayName: fbUser.displayName });
+    if (fbUser.email) {
+      await db.collection('users_by_email').doc(fbUser.email.toLowerCase()).set({ uid: fbUser.uid, displayName });
+    }
+    if (fbUser.phoneNumber) {
+      await db.collection('users_by_email').doc(fbUser.phoneNumber.replace(/\s/g,'')).set({ uid: fbUser.uid, displayName });
+    }
   }
 }
 
