@@ -465,6 +465,7 @@ const A = {
   // Claim being assembled step-by-step
   claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '', onAccount: false, recipients: [], recurring: false, recurrence: { freq: 'weekly', day: 'Monday', dayOfMonth: 1 } },
   dueClaims: [],
+  _lastSentId: null,
   confirmCancelId: null,
 
   // Counter-offer being assembled
@@ -767,7 +768,7 @@ function renderHome() {
     <div style="padding:16px 16px 10px;display:flex;align-items:center;gap:12px;">
       ${sheepSvg(52)}
       <div style="flex:1;text-align:center;">
-        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;">eweome</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;">eweome</div>
       </div>
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
@@ -1248,19 +1249,6 @@ function renderReqDetail() {
         <button class="btn btn-red"   style="padding:13px;" onclick="rejectClaim('${claim.id}')">Reject counter-offer</button>
       </div>` : ''}
 
-    ${claim.status === 'pending' && iAmCreditor ? `
-      <div style="padding:12px 16px 0;border-top:0.5px solid var(--border);margin-top:4px;">
-        <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.6;">Sent by mistake? You can cancel this request.</p>
-        ${A.confirmCancelId === claim.id
-          ? `<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">
-              <div style="font-size:13px;color:var(--red-600);margin-bottom:8px;">Cancel this request?</div>
-              <div style="display:flex;gap:8px;">
-                <button onclick="confirmCancelClaim()" class="btn btn-red" style="padding:9px;">Yes, cancel it</button>
-                <button onclick="abortCancelClaim()" class="btn btn-ghost" style="padding:9px;">Keep it</button>
-              </div></div>`
-          : `<button class="btn btn-red" style="padding:11px;" onclick="cancelClaim('${claim.id}')">Cancel this request</button>`}
-      </div>` : ''}
-
     ${(claim.status === 'agreed' || claim.status === 'accepted') ? `
       <div style="padding:12px 16px 0;border-top:0.5px solid var(--border);margin-top:4px;">
         <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.6;">
@@ -1271,6 +1259,26 @@ function renderReqDetail() {
         <button class="btn btn-ghost" style="padding:13px;" onclick="markSettled('${claim.id}')">
           ${iAmCreditor ? "I've received this money &#10003;" : "I've paid this &#10003;"}
         </button>
+      </div>` : ''}
+
+    ${(claim.status === 'pending' || claim.status === 'agreed' || claim.status === 'accepted') && iAmCreditor ? `
+      <div style="padding:8px 16px 4px;">
+        <button class="btn btn-ghost" style="padding:9px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${claim.id}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share via WhatsApp / other
+        </button>
+      </div>` : ''}
+
+    ${claim.status === 'pending' && iAmCreditor ? `
+      <div style="padding:4px 16px 8px;">
+        ${A.confirmCancelId === claim.id
+          ? `<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">
+              <div style="font-size:13px;color:var(--red-600);margin-bottom:8px;">Cancel this request?</div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="confirmCancelClaim()" class="btn btn-red" style="padding:9px;">Yes, cancel it</button>
+                <button onclick="abortCancelClaim()" class="btn btn-ghost" style="padding:9px;">Keep it</button>
+              </div></div>`
+          : `<button class="btn btn-red" style="padding:9px;font-size:13px;" onclick="cancelClaim('${claim.id}')">Cancel this request</button>`}
       </div>` : ''}
 
     ${claim.status === 'settlement_pending' && iAmCreditor ? `
@@ -1906,15 +1914,16 @@ function renderPending() {
           + '</div>'
           + '<span class="tag tag-amber" style="flex-shrink:0;">Waiting</span>'
           + '</div>'
-          + '<div style="padding:0 16px 10px;">'
+          + '<div style="padding:0 16px 10px;display:flex;gap:8px;">'
           + (A.confirmCancelId === c.id
-            ? '<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">'
+            ? '<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);width:100%;">'
               + '<div style="font-size:13px;color:var(--red-600);margin-bottom:8px;">Cancel this request?</div>'
               + '<div style="display:flex;gap:8px;">'
               + '<button onclick="confirmCancelClaim()" class="btn btn-red" style="padding:7px;font-size:12px;">Yes, cancel it</button>'
               + '<button onclick="abortCancelClaim()" class="btn btn-ghost" style="padding:7px;font-size:12px;">Keep it</button>'
               + '</div></div>'
-            : '<button onclick="cancelClaim(\'' + c.id + '\')" class="btn btn-red" style="padding:7px;font-size:12px;">Cancel request</button>'
+            : '<button onclick="cancelClaim(\'' + c.id + '\')" class="btn btn-red" style="padding:7px;font-size:12px;flex:1;">Cancel</button>'
+              + '<button onclick="shareViaSystem(\'' + c.id + '\')" class="btn btn-ghost" style="padding:7px;font-size:12px;flex:1;">Share</button>'
           )
           + '</div></div>';
       }).join('')}
@@ -1959,24 +1968,45 @@ function renderSettings() {
 ================================================================ */
 function renderNewConn() {
   const back = A.claim.type ? pfx()+'_who' : 'settings';
+    const hasContactPicker = 'contacts' in navigator && 'ContactsManager' in window;
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="go('${back}')" aria-label="Back">&#8249;</button>
       <span class="screen-title">New connection</span>
     </div>
     <div style="padding:20px 16px;">
-      <p style="font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6;">
-        Enter the name and Google email address of the person you want to connect with.
-        They'll need to have signed in to EweOMe at least once first.
-      </p>
+      ${hasContactPicker ? `
+        <button class="btn btn-ghost" style="padding:12px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="pickFromContacts()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Pick from phone contacts
+        </button>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+          <div style="flex:1;height:0.5px;background:var(--border);"></div>
+          <span style="font-size:12px;color:var(--text-3);">or enter manually</span>
+          <div style="flex:1;height:0.5px;background:var(--border);"></div>
+        </div>` : ''}
       <label class="field-label">Their name</label>
-      <input type="text"  id="nc-name"  class="input" placeholder="Full name"          style="margin-bottom:14px;" aria-label="Name"/>
-      <label class="field-label">Their email address</label>
-      <input type="email" id="nc-email" class="input" placeholder="name@example.com"   aria-label="Email address"/>
+      <input type="text" id="nc-name" class="input" placeholder="Full name" style="margin-bottom:14px;" aria-label="Name"/>
+      <label class="field-label">Their email or phone</label>
+      <input type="text" id="nc-email" class="input" placeholder="name@example.com or 07700 900000" aria-label="Email or phone"/>
     </div>
     <div style="padding:0 16px;">
-      <button class="btn btn-green" style="padding:13px;" onclick="addConnection()">Add connection</button>
-    </div>`;
+      <button class="btn btn-green" style="padding:13px;" onclick="addConnection()">Add and continue</button>
+    </div>`;}
+
+async function pickFromContacts() {
+  try {
+    const contacts = await navigator.contacts.select(['name','tel','email'], { multiple: false });
+    if (!contacts || contacts.length === 0) return;
+    const c = contacts[0];
+    const name = (c.name && c.name[0]) || '';
+    const email = (c.email && c.email[0]) || '';
+    const tel = (c.tel && c.tel[0]) || '';
+    const nameEl = document.getElementById('nc-name');
+    const emailEl = document.getElementById('nc-email');
+    if (nameEl) nameEl.value = name;
+    if (emailEl) emailEl.value = email || tel;
+  } catch(e) { console.log('Contact picker cancelled'); }
 }
 
 async function addConnection() {
@@ -2096,13 +2126,18 @@ function subscribeToData(uid) {
       const connIds = new Set((A.connections||[]).map(c => c.id));
       const toAdd = [];
       all.forEach(c => {
-        if (c.creditorUid === uid && !connIds.has(c.debtorUid) && c.debtorUid) {
+        if (c.creditorUid === uid && !connIds.has(c.debtorUid) && c.debtorUid && c.debtorUid !== uid) {
           connIds.add(c.debtorUid);
           toAdd.push({ id: c.debtorUid, name: c.debtorName, email: '', uid: c.debtorUid, color: toAdd.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
-        } else if (c.debtorUid === uid && !connIds.has(c.creditorUid) && c.creditorUid) {
+        } else if (c.debtorUid === uid && !connIds.has(c.creditorUid) && c.creditorUid && c.creditorUid !== uid) {
           connIds.add(c.creditorUid);
           toAdd.push({ id: c.creditorUid, name: c.creditorName, email: '', uid: c.creditorUid, color: toAdd.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
         }
+      const cleanedConns = (A.connections||[]).filter(c => c.id !== uid && c.uid !== uid);
+      if (cleanedConns.length < (A.connections||[]).length) {
+        db.collection('users').doc(uid).update({ connections: cleanedConns }).catch(() => {});
+        A.connections = cleanedConns;
+      }
       });
       if (toAdd.length > 0) {
         const merged = [...(A.connections||[]), ...toAdd];
