@@ -768,7 +768,7 @@ function renderHome() {
     <div style="padding:16px 16px 10px;display:flex;align-items:center;gap:12px;">
       ${sheepSvg(52)}
       <div style="flex:1;text-align:center;">
-        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;">eweome</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;">ewe-o-me</div>
       </div>
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
@@ -1996,17 +1996,45 @@ function renderNewConn() {
 
 async function pickFromContacts() {
   try {
-    const contacts = await navigator.contacts.select(['name','tel','email'], { multiple: false });
+    const contacts = await navigator.contacts.select(['name','tel','email'], { multiple: true });
     if (!contacts || contacts.length === 0) return;
-    const c = contacts[0];
+    if (contacts.length === 1) {
+      const c = contacts[0];
+      const name = (c.name && c.name[0]) || '';
+      const email = (c.email && c.email[0]) || '';
+      const tel = (c.tel && c.tel[0]) || '';
+      const nameEl = document.getElementById('nc-name');
+      const emailEl = document.getElementById('nc-email');
+      if (nameEl) nameEl.value = name;
+      if (emailEl) emailEl.value = email || tel;
+    } else {
+      await addMultipleContacts(contacts);
+    }
+  } catch(e) { console.log('Contact picker cancelled'); }
+}
+
+async function addMultipleContacts(contacts) {
+  const existing = A.connections || [];
+  const existingIds = new Set(existing.map(c => c.email || c.id));
+  const toAdd = [];
+  for (const c of contacts) {
     const name = (c.name && c.name[0]) || '';
     const email = (c.email && c.email[0]) || '';
     const tel = (c.tel && c.tel[0]) || '';
-    const nameEl = document.getElementById('nc-name');
-    const emailEl = document.getElementById('nc-email');
-    if (nameEl) nameEl.value = name;
-    if (emailEl) emailEl.value = email || tel;
-  } catch(e) { console.log('Contact picker cancelled'); }
+    const contact = email || tel;
+    if (!name || !contact) continue;
+    if (existingIds.has(contact)) continue;
+    existingIds.add(contact);
+    toAdd.push({ id: 'pending_' + Date.now() + '_' + toAdd.length, name, email: contact, uid: null, color: (existing.length + toAdd.length) % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
+  }
+  if (toAdd.length === 0) return;
+  const merged = [...existing, ...toAdd];
+  try {
+    await db.collection('users').doc(A.user.uid).update({ connections: merged });
+    A.connections = merged;
+    const back = A.claim && A.claim.type ? (A.claim.type === 'ioowe' ? 'io_who' : 'ew_who') : 'settings';
+    go(back);
+  } catch(e) { alert('Error saving contacts: ' + e.message); }
 }
 
 async function addConnection() {
