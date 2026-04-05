@@ -772,7 +772,8 @@ function renderSignIn() {
             <button class="google-btn" onclick="verifyCode()">Verify</button>
             <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.phoneStep='number';render()">&#8592; Back</button>
           ` : `
-            <input type="tel" id="si-phone" class="input" placeholder="+44 7700 900000" inputmode="tel" aria-label="Phone number"/>
+            <p style="font-size:12px;color:var(--text-2);text-align:center;margin-bottom:2px;">UK numbers: replace the leading 0 with +44<br>e.g. 07700 900000 &rarr; +44 7700 900000</p>
+            <input type="tel" id="si-phone" class="input" placeholder="+44 7700 900000" inputmode="tel" aria-label="Phone number" oninput="autoFormatPhone(this)"/>
             <div id="recaptcha-container"></div>
             <button class="google-btn" onclick="signInPhone()">Send code</button>
             <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.signinMode='choose';render()">&#8592; Back</button>
@@ -2126,6 +2127,13 @@ async function signInEmail(isNew) {
   } catch(e) {
     A.signinError = e.message.replace('Firebase: ','').replace(/ \(auth\/.*\)\.?/,'');
     render();
+  }
+}
+
+function autoFormatPhone(el) {
+  let v = el.value.trim();
+  if (v.startsWith('0') && !v.startsWith('00')) {
+    el.value = '+44 ' + v.slice(1);
   }
 }
 
