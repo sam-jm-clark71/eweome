@@ -710,13 +710,13 @@ function render() {
         </svg>
         My position
       </button>
-      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="${A.pendingClaims.length > 0 ? 'color:#BA7517;' : ''}">
+      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517;' : ''}">
+        ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:12px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:12px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
         <svg viewBox="0 0 24 24" aria-hidden="true" style="${A.pendingClaims.length > 0 ? 'stroke:#BA7517;' : ''}">
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
         Pending
-        ${A.pendingClaims.length > 0 ? `<span class="pending-counter" style="background:#BA7517;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span class="pending-counter">${A.sentClaims.length}</span>` : "")}
       </button>
       <button class="nav-item ${A.screen === 'settings' ? 'active' : ''}" onclick="go('settings')">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -806,25 +806,7 @@ function renderHome() {
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
 
-    ${hp ? `
-      <div class="notif-banner" onclick="viewClaim('${p.id}')">
-        <div class="notif-dot"></div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:500;color:var(--amber-600);">
-            ${p.status === 'settlement_pending'
-              ? esc(p.debtorName) + ' says they\'ve paid you'
-              : p.status === 'rejected'
-                ? esc(p.debtorName) + ' rejected your claim'
-                : esc(p.creditorName) + ' sent you a claim'}
-          </div>
-          <div style="font-size:12px;color:var(--amber-700);margin-top:2px;">
-            ${fmt(p.amount)} &middot; ${esc(p.description)}
-            ${A.pendingClaims.length > 1 ? ' &middot; +' + (A.pendingClaims.length - 1) + ' more' : ''}
-          </div>
-        </div>
-        <div style="color:var(--amber-700);font-size:20px;flex-shrink:0;">&#8250;</div>
-      </div>
-    ` : ''}
+
 
     <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:${hp?'10px':'28px'} 16px 24px;">
       <button class="circle-btn circle-green" onclick="startClaim('eweome')">
