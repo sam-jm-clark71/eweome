@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2222%22%20fill%3D%22%233B6D11%22%2F%3E%3Ctext%20x%3D%2250%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%20font-weight%3D%22900%22%20font-size%3D%2268%22%20fill%3D%22white%22%3Ee%3C%2Ftext%3E%3C%2Fsvg%3E">
   <meta name="theme-color" content="#3B6D11">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="EweOMe">
+  <meta name="apple-mobile-web-app-title" content="ewe-o-me">
 
   <!-- Firebase SDK (v9 compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -466,12 +466,16 @@ const A = {
   phoneNumber:    '',
   signinError:    '',
   _phoneVerifier: null,
+  _confirmResult: null,
+  needsOnboarding: false,
+  _lastSentId:    null,
+  confirmCancelId: null,
+  _connNotFound:  false,
+  _connNotFoundName: '',
 
   // Claim being assembled step-by-step
   claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '', onAccount: false, recipients: [], recurring: false, recurrence: { freq: 'weekly', day: 'Monday', dayOfMonth: 1 } },
   dueClaims: [],
-  _lastSentId: null,
-  confirmCancelId: null,
 
   // Counter-offer being assembled
   query: { amount: '', comment: '' },
@@ -683,6 +687,7 @@ function render() {
     recurring:   renderRecurring,
     reject_form: renderRejectForm,
     pending:    renderPending,
+    onboarding: renderOnboarding,
     settings:   renderSettings,
     new_conn:   renderNewConn,
   }[A.screen] || renderLoading;
@@ -711,7 +716,7 @@ function render() {
         My position
       </button>
       <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517;' : ''}">
-        ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:12px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:12px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
+        ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
         <svg viewBox="0 0 24 24" aria-hidden="true" style="${A.pendingClaims.length > 0 ? 'stroke:#BA7517;' : ''}">
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
@@ -747,14 +752,18 @@ function renderSignIn() {
         <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:42px;letter-spacing:0.01em;color:var(--green-600);display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</h1>
         <p style="font-size:13px;color:var(--text-2);margin-top:6px;">Log it. Track it. Settle it.</p>
       </div>
-
       ${mode === 'choose' ? `
         <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;">
-          <button class="google-btn" onclick="signIn()">${googleIcon()} Sign in with Google</button>
-          <button class="google-btn" onclick="A.signinMode='email';render()">&#9993;&nbsp; Sign in with email</button>
-          <button class="google-btn" onclick="A.signinMode='phone';render()">&#128222;&nbsp; Sign in with phone</button>
+          <button class="google-btn" style="background:#3B6D11;color:white;border-color:#3B6D11;font-size:15px;padding:14px;" onclick="A.signinMode='phone';render()">&#128222;&nbsp; Sign up / sign in with phone</button>
+          <p style="font-size:11px;color:var(--text-3);text-align:center;margin:0;">Phone number is recommended — it's the most reliable way for others to find you.</p>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="flex:1;height:0.5px;background:var(--border);"></div>
+            <span style="font-size:11px;color:var(--text-3);">or sign in another way</span>
+            <div style="flex:1;height:0.5px;background:var(--border);"></div>
+          </div>
+          <button class="google-btn" onclick="signIn()">${googleIcon()} Continue with Google</button>
+          <button class="google-btn" onclick="A.signinMode='email';render()">&#9993;&nbsp; Continue with email</button>
         </div>` : ''}
-
       ${mode === 'email' ? `
         <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
           <input type="email" id="si-email" class="input" placeholder="Email address" aria-label="Email"/>
@@ -763,7 +772,6 @@ function renderSignIn() {
           <button class="google-btn" onclick="signInEmail(true)">Create account</button>
           <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.signinMode='choose';render()">&#8592; Back</button>
         </div>` : ''}
-
       ${mode === 'phone' ? `
         <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
           ${A.phoneStep === 'code' ? `
@@ -772,14 +780,12 @@ function renderSignIn() {
             <button class="google-btn" onclick="verifyCode()">Verify</button>
             <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.phoneStep='number';render()">&#8592; Back</button>
           ` : `
-            <p style="font-size:12px;color:var(--text-2);text-align:center;margin-bottom:2px;">UK numbers: replace the leading 0 with +44<br>e.g. 07700 900000 &rarr; +44 7700 900000</p>
-            <input type="tel" id="si-phone" class="input" placeholder="+44 7700 900000" inputmode="tel" aria-label="Phone number" oninput="autoFormatPhone(this)"/>
+            <input type="tel" id="si-phone" class="input" placeholder="07700 900000 or +44 7700 900000" inputmode="tel" aria-label="Phone number"/>
             <div id="recaptcha-container"></div>
             <button class="google-btn" onclick="signInPhone()">Send code</button>
             <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.signinMode='choose';render()">&#8592; Back</button>
           `}
         </div>` : ''}
-
       ${A.signinError ? `<p style="font-size:13px;color:var(--red-600);text-align:center;max-width:260px;">${esc(A.signinError)}</p>` : ''}
     </div>`;
 }
@@ -801,14 +807,22 @@ function renderHome() {
     <div style="padding:16px 16px 10px;display:flex;align-items:center;gap:12px;">
       ${sheepSvg(52)}
       <div style="flex:1;text-align:center;">
-        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;">eweome</div>
       </div>
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
 
 
 
-    <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:${hp?'10px':'28px'} 16px 24px;">
+    ${hp ? `
+      <div onclick="go('pending')" style="margin:0 14px 2px;padding:12px 14px;background:#BA7517;border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;gap:10px;">
+        <div style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;flex-shrink:0;">${A.pendingClaims.length}</div>
+        <div style="flex:1;"><div style="font-size:14px;font-weight:500;color:white;">Pending requests</div><div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:1px;">Tap to review</div></div>
+        <div style="color:white;font-size:20px;">&#8250;</div>
+      </div>
+    ` : ''}
+
+    <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:${padTop} 16px 24px;">
       <button class="circle-btn circle-green" onclick="startClaim('eweome')">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:19px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">YOU</span>
@@ -902,12 +916,11 @@ function proceedMulti() {
 }
 
 function selectPerson(id, name) {
-  if (id === A.user.uid) {
-    alert("You can't send a claim to yourself.");
-    return;
-  }
-  A.claim.personId   = id;
-  A.claim.personName = name;
+  if (id === A.user.uid) { alert("You can't send a claim to yourself."); return; }
+  A.claim.personId    = id;
+  A.claim.personName  = name;
+  A._connNotFound     = false;
+  A._connNotFoundName = '';
   go(pfx() + '_amt');
 }
 
@@ -922,6 +935,7 @@ function renderAmount() {
 
   return `
     ${hdr(lbl, pfx()+'_who', 2, 4)}
+    ${A._connNotFound ? `<div style="margin:10px 16px 0;padding:10px 12px;background:var(--amber-50);border-radius:var(--radius-sm);border:0.5px solid var(--amber-100);"><span style="font-size:12px;color:var(--amber-700);">&#9888; ${esc(A._connNotFoundName||'')} hasn't registered yet. You can still send the claim and invite them to join when you share it.</span></div>` : ""}
     <div class="amount-wrap">
       <span class="amount-symbol">&pound;</span>
       <input
@@ -1176,10 +1190,33 @@ async function sendClaim() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    A._lastSentId = docRef ? docRef.id : null;
     go(pfx() + '_sent');
   } catch (e) {
     alert('Error sending claim. Please try again.\n\n' + e.message);
   }
+}
+
+/* ================================================================
+   WHATSAPP / SHARE
+================================================================ */
+function buildShareText(claim) {
+  const io = claim.type === 'ioowe';
+  const dir = io ? 'I owe you' : 'You owe me';
+  const desc = claim.description ? ' for ' + claim.description : '';
+  const date = claim.date ? ' (' + fmtDate(claim.date) + ')' : '';
+  const onAcct = claim.onAccount ? ' No rush — just keeping track.' : '';
+  return dir + ' ' + fmt(claim.amount) + desc + date + '.' + onAcct
+    + '\n\nTracking this on ewe-o-me: https://eweome-41e0f.web.app';
+}
+
+function shareViaSystem(claimId) {
+  const all = [...A.pendingClaims, ...A.sentClaims, ...A.ledger, ...(A.settled||[])];
+  const claim = all.find(c => c.id === claimId);
+  if (!claim) return;
+  const text = buildShareText(claim);
+  if (navigator.share) { navigator.share({ text }).catch(() => {}); }
+  else window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
 /* ================================================================
@@ -1197,7 +1234,10 @@ function renderSent() {
         <strong>${fmt(A.claim.amount)}</strong>.<br>
         You'll hear back once they respond.
       </div>
-      <button class="btn btn-green" style="margin-top:16px;padding:13px;" onclick="go('home')">Back to home</button>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;width:100%;">
+        <button class="btn btn-green" style="padding:13px;" onclick="go('home')">Back to home</button>
+        ${A._lastSentId ? `<button class="btn btn-ghost" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${A._lastSentId}')"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><line x1='8.59' y1='13.51' x2='15.42' y2='17.49'/><line x1='15.41' y1='6.51' x2='8.59' y2='10.49'/></svg> Share via WhatsApp / other</button>` : ''}
+      </div>
     </div>`;
 }
 
@@ -1265,6 +1305,18 @@ function renderReqDetail() {
         <button class="btn btn-red"   style="padding:13px;" onclick="rejectClaim('${claim.id}')">Reject counter-offer</button>
       </div>` : ''}
 
+    ${claim.status === 'pending' && iAmCreditor ? `
+      <div style="padding:4px 16px 8px;">
+        ${A.confirmCancelId === claim.id
+          ? `<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">
+              <div style="font-size:13px;color:var(--red-600);margin-bottom:8px;">Cancel this request?</div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="confirmCancelClaim()" class="btn btn-red" style="padding:9px;">Yes, cancel it</button>
+                <button onclick="abortCancelClaim()" class="btn btn-ghost" style="padding:9px;">Keep it</button>
+              </div></div>`
+          : `<button class="btn btn-red" style="padding:9px;font-size:13px;" onclick="cancelClaim('${claim.id}')">Cancel this request</button>`}
+      </div>` : ''}
+
     ${(claim.status === 'agreed' || claim.status === 'accepted') ? `
       <div style="padding:12px 16px 0;border-top:0.5px solid var(--border);margin-top:4px;">
         <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.6;">
@@ -1278,23 +1330,8 @@ function renderReqDetail() {
       </div>` : ''}
 
     ${(claim.status === 'pending' || claim.status === 'agreed' || claim.status === 'accepted') && iAmCreditor ? `
-      <div style="padding:8px 16px 4px;">
-        <button class="btn btn-ghost" style="padding:9px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${claim.id}')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          Share via WhatsApp / other
-        </button>
-      </div>` : ''}
-
-    ${claim.status === 'pending' && iAmCreditor ? `
-      <div style="padding:4px 16px 8px;">
-        ${A.confirmCancelId === claim.id
-          ? `<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">
-              <div style="font-size:13px;color:var(--red-600);margin-bottom:8px;">Cancel this request?</div>
-              <div style="display:flex;gap:8px;">
-                <button onclick="confirmCancelClaim()" class="btn btn-red" style="padding:9px;">Yes, cancel it</button>
-                <button onclick="abortCancelClaim()" class="btn btn-ghost" style="padding:9px;">Keep it</button>
-              </div></div>`
-          : `<button class="btn btn-red" style="padding:9px;font-size:13px;" onclick="cancelClaim('${claim.id}')">Cancel this request</button>`}
+      <div style="padding:4px 16px 4px;">
+        <button class="btn btn-ghost" style="padding:9px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${claim.id}')"><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><line x1='8.59' y1='13.51' x2='15.42' y2='17.49'/><line x1='15.41' y1='6.51' x2='8.59' y2='10.49'/></svg> Share via WhatsApp / other</button>
       </div>` : ''}
 
     ${claim.status === 'settlement_pending' && iAmCreditor ? `
@@ -1318,13 +1355,9 @@ function renderReqDetail() {
 
 function skipClaim(id) {
   const idx = A.pendingClaims.findIndex(c => c.id === id);
-  if (idx >= 0) {
-    const skipped = A.pendingClaims.splice(idx, 1)[0];
-    A.pendingClaims.push(skipped);
-  }
+  if (idx >= 0) { const s = A.pendingClaims.splice(idx,1)[0]; A.pendingClaims.push(s); }
   const next = A.pendingClaims.find(c => c.id !== id);
-  if (next) { A.selectedClaimId = next.id; go('req_detail'); }
-  else go('pending');
+  if (next) { A.selectedClaimId = next.id; go('req_detail'); } else go('pending');
 }
 
 function goNextPending() {
@@ -1413,27 +1446,17 @@ async function confirmReject(id) {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
-function cancelClaim(id) {
-  A.confirmCancelId = id;
-  render();
-}
+function cancelClaim(id) { A.confirmCancelId = id; render(); }
 
 async function confirmCancelClaim() {
-  const id = A.confirmCancelId;
-  A.confirmCancelId = null;
+  const id = A.confirmCancelId; A.confirmCancelId = null;
   try {
-    await db.collection('claims').doc(id).update({
-      status: 'cancelled',
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    await db.collection('claims').doc(id).update({ status: 'cancelled', updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     go('pending');
   } catch(e) { go('pending'); }
 }
 
-function abortCancelClaim() {
-  A.confirmCancelId = null;
-  render();
-}
+function abortCancelClaim() { A.confirmCancelId = null; render(); }
 
 async function dismissRejected(id) {
   try {
@@ -1959,6 +1982,45 @@ function renderPending() {
 }
 
 /* ================================================================
+   SCREEN: ONBOARDING (phone number collection)
+================================================================ */
+function renderOnboarding() {
+  return `
+    <div class="signin-screen" style="padding:40px 24px;">
+      ${sheepSvg(60)}
+      <div style="text-align:center;">
+        <div style="font-size:18px;font-weight:500;margin-bottom:8px;">One more thing</div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:280px;">
+          Your phone number helps others find you reliably — it's more unique than an email address.
+          You can skip this, but adding it makes the app work much better.
+        </p>
+      </div>
+      <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
+        <input type="tel" id="ob-phone" class="input" placeholder="07700 900000 or +44 7700 900000" inputmode="tel" aria-label="Phone number"/>
+        <button class="btn btn-green" style="padding:13px;" onclick="saveOnboardingPhone()">Save my phone number</button>
+        <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;padding:8px;" onclick="skipOnboarding()">Skip for now</button>
+      </div>
+    </div>`;
+}
+
+async function saveOnboardingPhone() {
+  const rawOb = document.getElementById('ob-phone')?.value.trim();
+  if (!rawOb) { go('home'); return; }
+  const normalised = normalisePhone(rawOb);
+  try {
+    await db.collection('users').doc(A.user.uid).update({ phone: normalised });
+    await db.collection('users_by_phone').doc(normalised).set({ uid: A.user.uid, displayName: A.userDoc?.displayName || A.user.displayName || '' });
+    A.needsOnboarding = false;
+    go('home');
+  } catch(e) { go('home'); }
+}
+
+function skipOnboarding() {
+  A.needsOnboarding = false;
+  go('home');
+}
+
+/* ================================================================
    SCREEN: SETTINGS
 ================================================================ */
 function renderSettings() {
@@ -1974,12 +2036,17 @@ function renderSettings() {
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:10px;">My connections (${A.connections.length})</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-        ${A.connections.map(c =>
-          `<div class="avatar ${c.color||''}" style="width:34px;height:34px;font-size:11px;" title="${esc(c.name)}">${initials(c.name)}</div>`
-        ).join('') || `<span style="font-size:13px;color:var(--text-2);">None yet</span>`}
-      </div>
-      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
+      ${A.connections.length === 0 ? '<span style="font-size:13px;color:var(--text-2);">None yet</span>' : ''}
+      ${A.connections.map(c => `
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:0.5px solid var(--border);">
+          <div class="avatar ${c.color||''}" style="width:32px;height:32px;font-size:11px;flex-shrink:0;">${initials(c.name)}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:500;">${esc(c.name)}</div>
+            <div style="font-size:11px;color:var(--text-2);">${esc(c.email||'')} ${c.uid ? '' : '<span style="color:var(--amber-700);">not yet registered</span>'}</div>
+          </div>
+          <button onclick="removeConnection('${c.id}')" style="background:none;border:none;color:var(--red-600);font-size:18px;cursor:pointer;padding:4px;">&#215;</button>
+        </div>`).join('')}
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;margin-top:10px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:2px;">Currency</div>
@@ -1993,6 +2060,15 @@ function renderSettings() {
 /* ================================================================
    SCREEN: NEW CONNECTION
 ================================================================ */
+async function removeConnection(id) {
+  const updated = (A.connections||[]).filter(c => c.id !== id);
+  try {
+    await db.collection('users').doc(A.user.uid).update({ connections: updated });
+    A.connections = updated;
+    render();
+  } catch(e) { alert('Error: '+e.message); }
+}
+
 function renderNewConn() {
   const back = A.claim.type ? pfx()+'_who' : 'settings';
     const hasContactPicker = 'contacts' in navigator && 'ContactsManager' in window;
@@ -2014,8 +2090,8 @@ function renderNewConn() {
         </div>` : ''}
       <label class="field-label">Their name</label>
       <input type="text" id="nc-name" class="input" placeholder="Full name" style="margin-bottom:14px;" aria-label="Name"/>
-      <label class="field-label">Their email or phone</label>
-      <input type="text" id="nc-email" class="input" placeholder="name@example.com or 07700 900000" aria-label="Email or phone"/>
+      <label class="field-label">Their phone or email</label>
+      <input type="text" id="nc-email" class="input" placeholder="+44 7700 900000 or name@example.com" aria-label="Phone or email"/>
     </div>
     <div style="padding:0 16px;">
       <button class="btn btn-green" style="padding:13px;" onclick="addConnection()">Add and continue</button>
@@ -2027,41 +2103,33 @@ async function pickFromContacts() {
     if (!contacts || contacts.length === 0) return;
     if (contacts.length === 1) {
       const c = contacts[0];
-      const name = (c.name && c.name[0]) || '';
-      const email = (c.email && c.email[0]) || '';
-      const tel = (c.tel && c.tel[0]) || '';
-      const nameEl = document.getElementById('nc-name');
-      const emailEl = document.getElementById('nc-email');
-      if (nameEl) nameEl.value = name;
-      if (emailEl) emailEl.value = email || tel;
-    } else {
-      await addMultipleContacts(contacts);
-    }
+      const el = document.getElementById('nc-name'); if (el) el.value = (c.name&&c.name[0])||'';
+      const el2 = document.getElementById('nc-email'); if (el2) el2.value = (c.tel&&c.tel[0])||(c.email&&c.email[0])||'';
+    } else { await addMultipleContacts(contacts); }
   } catch(e) { console.log('Contact picker cancelled'); }
 }
 
 async function addMultipleContacts(contacts) {
   const existing = A.connections || [];
-  const existingIds = new Set(existing.map(c => c.email || c.id));
+  const existingKeys = new Set(existing.map(c => (c.email||c.id||'').toLowerCase()));
   const toAdd = [];
   for (const c of contacts) {
-    const name = (c.name && c.name[0]) || '';
-    const email = (c.email && c.email[0]) || '';
-    const tel = (c.tel && c.tel[0]) || '';
-    const contact = email || tel;
-    if (!name || !contact) continue;
-    if (existingIds.has(contact)) continue;
-    existingIds.add(contact);
-    toAdd.push({ id: 'pending_' + Date.now() + '_' + toAdd.length, name, email: contact, uid: null, color: (existing.length + toAdd.length) % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
+    const name = (c.name&&c.name[0])||'';
+    const tel  = (c.tel&&c.tel[0])||'';
+    const email= (c.email&&c.email[0])||'';
+    const key  = (tel||email||'').toLowerCase();
+    if (!name||!key||existingKeys.has(key)) continue;
+    existingKeys.add(key);
+    toAdd.push({ id:'pending_'+Date.now()+'_'+toAdd.length, name, email:key, uid:null, color:(existing.length+toAdd.length)%2===0?'':'amber', addedAt:new Date().toISOString() });
   }
-  if (toAdd.length === 0) return;
+  if (toAdd.length===0) return;
   const merged = [...existing, ...toAdd];
   try {
     await db.collection('users').doc(A.user.uid).update({ connections: merged });
     A.connections = merged;
-    const back = A.claim && A.claim.type ? (A.claim.type === 'ioowe' ? 'io_who' : 'ew_who') : 'settings';
+    const back = A.claim&&A.claim.type ? (A.claim.type==='ioowe'?'io_who':'ew_who') : 'settings';
     go(back);
-  } catch(e) { alert('Error saving contacts: ' + e.message); }
+  } catch(e) { alert('Error: '+e.message); }
 }
 
 async function addConnection() {
@@ -2078,9 +2146,16 @@ async function addConnection() {
 
   try {
     // Look up whether they've already registered
-    const lookupKey = /^[+\d]/.test(email) ? email.replace(/\s/g,'') : email;
-    const snap    = await db.collection('users_by_email').doc(lookupKey).get();
+    const isPhone = /^[+\d]/.test(email);
+    const lookupKey = isPhone ? email.replace(/\s/g,'') : email.toLowerCase();
+    let snap = await db.collection('users_by_phone').doc(lookupKey).get();
+    if (!snap.exists) snap = await db.collection('users_by_email').doc(lookupKey).get();
     const theirUid = snap.exists ? snap.data().uid : null;
+    if (!theirUid) {
+      A._connNotFound = true;
+    } else {
+      A._connNotFound = false;
+    }
 
     const conn = {
       id:      theirUid || ('pending_' + Date.now()),
@@ -2110,56 +2185,48 @@ async function addConnection() {
 /* ================================================================
    FIREBASE AUTH
 ================================================================ */
+function autoFormatPhone(el) {
+  let v = el.value.trim();
+  if (v.startsWith('0') && !v.startsWith('00')) el.value = '+44 ' + v.slice(1);
+}
+
+function normalisePhone(raw) {
+  let v = (raw||'').trim().replace(/[\s\-().]/g,'');
+  if (v.startsWith('00')) v = '+' + v.slice(2);
+  if (v.startsWith('0') && !v.startsWith('00')) v = '+44' + v.slice(1);
+  return v;
+}
+
 async function signInEmail(isNew) {
   A.signinError = '';
   const email = document.getElementById('si-email')?.value.trim();
   const pass  = document.getElementById('si-pass')?.value;
   if (!email || !pass) { A.signinError = 'Please enter your email and password.'; render(); return; }
   try {
-    if (isNew) { await auth.createUserWithEmailAndPassword(email, pass); }
-    else       { await auth.signInWithEmailAndPassword(email, pass); }
-  } catch(e) {
-    A.signinError = e.message.replace('Firebase: ','').replace(/ \(auth\/.*\)\.?/,'');
-    render();
-  }
-}
-
-function autoFormatPhone(el) {
-  let v = el.value.trim();
-  if (v.startsWith('0') && !v.startsWith('00')) {
-    el.value = '+44 ' + v.slice(1);
-  }
+    if (isNew) await auth.createUserWithEmailAndPassword(email, pass);
+    else       await auth.signInWithEmailAndPassword(email, pass);
+  } catch(e) { A.signinError = e.message.replace('Firebase: ','').replace(/ \(auth\/.*\)\.?/,''); render(); }
 }
 
 async function signInPhone() {
   A.signinError = '';
-  const phone = document.getElementById('si-phone')?.value.trim();
-  if (!phone) { A.signinError = 'Please enter your phone number.'; render(); return; }
+  const rawPhone = document.getElementById('si-phone')?.value.trim();
+  if (!rawPhone) { A.signinError = 'Please enter your phone number.'; render(); return; }
+  const phone = normalisePhone(rawPhone);
   try {
-    if (!A._phoneVerifier) {
-      A._phoneVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
-    }
+    if (!A._phoneVerifier) A._phoneVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
     A.phoneNumber = phone;
     A._confirmResult = await auth.signInWithPhoneNumber(phone, A._phoneVerifier);
-    A.phoneStep = 'code';
-    render();
-  } catch(e) {
-    A.signinError = 'Could not send code. Check the number and try again.';
-    A._phoneVerifier = null;
-    render();
-  }
+    A.phoneStep = 'code'; render();
+  } catch(e) { A.signinError = 'Could not send code. Check the number and try again.'; A._phoneVerifier = null; render(); }
 }
 
 async function verifyCode() {
   A.signinError = '';
   const code = document.getElementById('si-code')?.value.trim();
   if (!code) { A.signinError = 'Please enter the code.'; render(); return; }
-  try {
-    await A._confirmResult.confirm(code);
-  } catch(e) {
-    A.signinError = 'Incorrect code. Please try again.';
-    render();
-  }
+  try { await A._confirmResult.confirm(code); }
+  catch(e) { A.signinError = 'Incorrect code. Please try again.'; render(); }
 }
 
 async function signIn() {
@@ -2193,7 +2260,7 @@ async function ensureUserDoc(fbUser) {
     const displayName = fbUser.displayName || fbUser.email || fbUser.phoneNumber || 'User';
     const data = {
       displayName,
-      email:    fbUser.email || null,
+      email:    fbUser.email    || null,
       phone:    fbUser.phoneNumber || null,
       photoURL: fbUser.photoURL || null,
       connections: [],
@@ -2202,10 +2269,14 @@ async function ensureUserDoc(fbUser) {
     await ref.set(data);
     if (fbUser.email) {
       await db.collection('users_by_email').doc(fbUser.email.toLowerCase()).set({ uid: fbUser.uid, displayName });
+      await db.collection('users_by_phone').doc(fbUser.email.toLowerCase()).set({ uid: fbUser.uid, displayName });
     }
     if (fbUser.phoneNumber) {
-      await db.collection('users_by_email').doc(fbUser.phoneNumber.replace(/\s/g,'')).set({ uid: fbUser.uid, displayName });
+      const pn = fbUser.phoneNumber.replace(/\s/g,'');
+      await db.collection('users_by_phone').doc(pn).set({ uid: fbUser.uid, displayName });
+      await db.collection('users_by_email').doc(pn).set({ uid: fbUser.uid, displayName });
     }
+    if (!fbUser.phoneNumber) A.needsOnboarding = true;
   }
 }
 
@@ -2248,7 +2319,7 @@ function subscribeToData(uid) {
         }
       const cleanedConns = (A.connections||[]).filter(c => c.id !== uid && c.uid !== uid);
       if (cleanedConns.length < (A.connections||[]).length) {
-        db.collection('users').doc(uid).update({ connections: cleanedConns }).catch(() => {});
+        db.collection('users').doc(uid).update({ connections: cleanedConns }).catch(()=>{});
         A.connections = cleanedConns;
       }
       });
@@ -2292,7 +2363,8 @@ auth.onAuthStateChanged(async fbUser => {
     A.user = fbUser;
     await ensureUserDoc(fbUser);
     subscribeToData(fbUser.uid);
-    go('home');
+    if (A.needsOnboarding) go('onboarding');
+    else go('home');
   } else {
     A.user        = null;
     A.userDoc     = null;
