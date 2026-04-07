@@ -935,7 +935,10 @@ function renderAmount() {
 
   return `
     ${hdr(lbl, pfx()+'_who', 2, 4)}
-    ${A._connNotFound ? `<div style="margin:10px 16px 0;padding:10px 12px;background:var(--amber-50);border-radius:var(--radius-sm);border:0.5px solid var(--amber-100);"><span style="font-size:12px;color:var(--amber-700);">&#9888; ${esc(A._connNotFoundName||'')} hasn't registered yet. You can still send the claim and invite them to join when you share it.</span></div>` : ""}
+    ${A._connNotFound ? `<div style="margin:10px 16px 0;padding:10px 12px;background:var(--amber-50);border-radius:var(--radius-sm);border:0.5px solid var(--amber-100);">
+      <div style="font-size:12px;color:var(--amber-700);margin-bottom:8px;">&#9888; ${esc(A._connNotFoundName||'')} hasn't registered yet. You can still send the claim — share the app with them so they can join and see it.</div>
+      <button onclick="inviteContact('${esc(A._connNotFoundName||'')}')" class="btn btn-ghost" style="font-size:12px;padding:7px 10px;width:auto;background:var(--amber-50);border-color:var(--amber-100);">Invite ${esc(A._connNotFoundName||'')} to ewe-o-me</button>
+    </div>` : ""}
     <div class="amount-wrap">
       <span class="amount-symbol">&pound;</span>
       <input
@@ -2031,8 +2034,12 @@ function renderSettings() {
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">Signed in as</div>
-      <div style="font-size:15px;font-weight:500;">${esc(A.user?.displayName || '')}</div>
-      <div style="font-size:13px;color:var(--text-2);">${esc(A.user?.email || '')}</div>
+      <div style="font-size:15px;font-weight:500;">${esc(A.userDoc?.displayName || A.user?.displayName || '')}</div>
+      ${A.user?.email ? `<div style="font-size:13px;color:var(--text-2);">${esc(A.user.email)}</div>` : ''}
+      ${A.userDoc?.phone || A.user?.phoneNumber ? `<div style="font-size:13px;color:var(--text-2);">${esc(A.userDoc?.phone || A.user?.phoneNumber)}</div>` : ''}
+      ${!A.userDoc?.phone && !A.user?.phoneNumber ? `
+        <button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;margin-top:6px;width:auto;" onclick="go('onboarding')">Add phone number</button>
+      ` : ''}
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:10px;">My connections (${A.connections.length})</div>
@@ -2185,6 +2192,12 @@ async function addConnection() {
 /* ================================================================
    FIREBASE AUTH
 ================================================================ */
+function inviteContact(name) {
+  const text = (name ? name + ', ' : '') + "I'd like to add you as a contact on ewe-o-me, an app I use to track who owes what to whom. Join here: https://eweome-41e0f.web.app";
+  if (navigator.share) { navigator.share({ text }).catch(() => {}); }
+  else window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
 function autoFormatPhone(el) {
   let v = el.value.trim();
   if (v.startsWith('0') && !v.startsWith('00')) el.value = '+44 ' + v.slice(1);
