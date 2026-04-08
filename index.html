@@ -1962,7 +1962,7 @@ function renderPending() {
       </div>
       ${outgoing.map(c => {
         return '<div style="border-bottom:0.5px solid var(--border)">'
-          + '<div class="list-item" style="border-bottom:none;" onclick="viewClaim(\'' + c.id + '\')">' 
+          + '<div class="list-item" style="border-bottom:none;" onclick="viewClaim(\'' + c.id + '\')">'
           + '<div class="avatar">' + initials(c.debtorName) + '</div>'
           + '<div style="flex:1;min-width:0;">'
           + '<div style="font-size:14px;font-weight:500;">You claimed ' + fmt(c.amount) + ' from ' + esc(c.debtorName) + '</div>'
@@ -2280,16 +2280,14 @@ async function verifyCode() {
 }
 
 async function signIn() {
+  // Use native Android bridge if available
+  if (window.isAndroidApp && window.AndroidBridge) {
+    window.AndroidBridge.startGoogleSignIn();
+    return;
+  }
   const provider = new firebase.auth.GoogleAuthProvider();
-  // Detect Android WebView and use redirect instead of popup
-  const isWebView = /wv/.test(navigator.userAgent) || 
-    (navigator.userAgent.includes('Android') && !navigator.userAgent.includes('Chrome/'));
   try {
-    if (isWebView) {
-      await auth.signInWithRedirect(provider);
-    } else {
-      await auth.signInWithPopup(provider);
-    }
+    await auth.signInWithPopup(provider);
   } catch(e) {
     if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user') {
       await auth.signInWithRedirect(provider);
@@ -2299,6 +2297,22 @@ async function signIn() {
     }
   }
 }
+
+// Called by Android native after successful Google Sign-In
+window.handleNativeGoogleSignIn = async function(idToken) {
+  try {
+    const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+    await auth.signInWithCredential(credential);
+  } catch(e) {
+    A.signinError = 'Sign-in failed: ' + e.message;
+    render();
+  }
+};
+
+window.handleNativeGoogleSignInError = function(msg) {
+  A.signinError = 'Google sign-in failed. Please try phone or email instead.';
+  render();
+};
 
 function doSignOut() {
   A._unsubs.forEach(fn => fn());
