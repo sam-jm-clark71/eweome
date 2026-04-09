@@ -14,6 +14,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 
   <style>
     /* ================================================================
@@ -98,7 +99,7 @@
       bottom: 0; left: 0; right: 0;
       height: 64px;
       background: var(--bg);
-      border-top: 0.5px solid var(--border);
+      border-top: 1px solid rgba(0,0,0,0.15);
       display: flex;
       z-index: 100;
       padding-bottom: env(safe-area-inset-bottom, 0);
@@ -114,14 +115,14 @@
       justify-content: center;
       gap: 3px;
       font-size: 10px;
-      color: var(--text-3);
+      color: var(--text-2);
       cursor: pointer;
       transition: color 0.15s;
       padding-bottom: 4px;
       -webkit-tap-highlight-color: transparent;
     }
     .nav-item.active { color: var(--green-600); }
-    .nav-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+    .nav-item svg { width: 25px; height: 25px; stroke: currentColor; fill: none; stroke-width: 2; }
 
     /* ================================================================
        SCREEN HEADER
@@ -475,6 +476,7 @@ const A = {
   _connNotFound:  false,
   _connNotFoundName: '',
   _pendingShown:  false,
+  confirmBulkSettle: null,
 
   // Claim being assembled step-by-step
   claim: { type: null, personId: null, personName: null, amount: '', date: '', desc: '', onAccount: false, recipients: [], recurring: false, recurrence: { freq: 'weekly', day: 'Monday', dayOfMonth: 1 } },
@@ -719,7 +721,7 @@ function render() {
         </svg>
         My position
       </button>
-      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517;' : ''}">
+      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517;background:rgba(186,117,23,0.1);border-radius:8px;' : ''}">
         ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
         <svg viewBox="0 0 24 24" aria-hidden="true" style="${A.pendingClaims.length > 0 ? 'stroke:#BA7517;' : ''}">
           <circle cx="12" cy="12" r="10"/>
@@ -808,15 +810,15 @@ function renderHome() {
       </div>
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:8px 16px 12px;">
-      <button class="circle-btn circle-green" onclick="startClaim('eweome')">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(8px,3vh,24px) 16px;gap:clamp(8px,3vh,24px);">
+      <button class="circle-btn circle-green" onclick="startClaim('eweome')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">YOU</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">OWE</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">ME</span>
         </div>
       </button>
-      <button class="circle-btn circle-amber" onclick="startClaim('ioowe')">
+      <button class="circle-btn circle-amber" onclick="startClaim('ioowe')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">I</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">OWE</span>
@@ -1155,7 +1157,7 @@ async function sendClaim() {
   const debtName = io ? (A.userDoc?.displayName || A.user.displayName) : A.claim.personName;
 
   try {
-    await db.collection('claims').add({
+    const docRef = await db.collection('claims').add({
       creditorUid:  credUid,
       creditorName: credName,
       debtorUid:    debtUid,
@@ -1168,7 +1170,7 @@ async function sendClaim() {
       description:  A.claim.desc,
       date:         A.claim.date,
       type:         A.claim.type,
-      status:       'pending',
+      status:       io ? 'agreed' : 'pending',
       counterAmount:   null,
       counterComment:  null,
       participants:    [credUid, debtUid],
@@ -1193,10 +1195,10 @@ function renderSent() {
       ${sheepSvg(72)}
       <div style="font-size:22px;font-weight:500;">Claim sent!</div>
       <div style="font-size:14px;color:var(--text-2);line-height:1.8;">
-        ${A.claim.recipients && A.claim.recipients.length > 1 ? A.claim.recipients.map(r => esc(r.name)).join(', ') : esc(A.claim.personName)} has been notified that
-        ${io ? 'you owe them' : 'they owe you'}
-        <strong>${fmt(A.claim.amount)}</strong>.<br>
-        You'll hear back once they respond.
+        ${A.claim.recipients && A.claim.recipients.length > 1 ? A.claim.recipients.map(r => esc(r.name)).join(', ') : esc(A.claim.personName)}
+        ${io
+          ? 'has been notified that you owe them <strong>' + fmt(A.claim.amount) + '</strong>. This has been automatically logged as agreed.'
+          : 'has been notified that they owe you <strong>' + fmt(A.claim.amount) + '</strong>. You\'ll hear back once they respond.'}
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;width:100%;">
         <button class="btn btn-green" style="padding:13px;" onclick="go('home')">Back to home</button>
@@ -1305,6 +1307,29 @@ function renderReqDetail() {
         </p>
         <button class="btn btn-green" style="padding:13px;" onclick="confirmSettlement('${claim.id}')">Yes, I've received it &#10003;</button>
         <button class="btn btn-red"   style="padding:13px;" onclick="disputeSettlement('${claim.id}')">I haven't received this yet</button>
+      </div>` : ''}
+
+    ${claim.status === 'evidence_requested' && iAmCreditor ? `
+      <div style="padding:12px 16px;margin:8px 16px 0;background:var(--amber-50);border-radius:var(--radius-sm);border:0.5px solid var(--amber-100);">
+        <p style="font-size:13px;color:var(--amber-700);line-height:1.6;margin-bottom:10px;">
+          ${esc(claim.debtorName)} has requested evidence for this claim.
+          ${claim.evidenceNote ? '<br><em>' + esc(claim.evidenceNote) + '</em>' : ''}
+        </p>
+        <label class="field-label">Upload a photo or receipt</label>
+        <input type="file" id="ev-file" accept="image/*,application/pdf" style="margin-bottom:10px;width:100%;font-size:13px;" capture="environment"/>
+        <button class="btn btn-green" style="padding:11px;font-size:13px;" onclick="uploadEvidence('${claim.id}')">Upload evidence</button>
+        ${claim.evidenceUrl ? `<div style="margin-top:10px;"><a href="${esc(claim.evidenceUrl)}" target="_blank" style="font-size:13px;color:var(--green-600);">&#128247; View uploaded evidence</a></div>` : ''}
+      </div>` : ''}
+
+    ${claim.status === 'evidence_requested' && iAmDebtor ? `
+      <div style="padding:12px 16px;margin:8px 16px 0;background:var(--amber-50);border-radius:var(--radius-sm);border:0.5px solid var(--amber-100);">
+        <p style="font-size:13px;color:var(--amber-700);line-height:1.6;">You've requested evidence from ${esc(claim.creditorName)}. Waiting for them to upload.</p>
+        ${claim.evidenceUrl ? `
+          <div style="margin-top:10px;"><a href="${esc(claim.evidenceUrl)}" target="_blank" style="font-size:13px;color:var(--green-600);">&#128247; View uploaded evidence</a></div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+            <button class="btn btn-green" style="padding:11px;" onclick="acceptClaim('${claim.id}')">Accept claim &#10003;</button>
+            <button class="btn btn-amber" style="padding:11px;" onclick="A.queryMode='amount';go('q_form')">Still query the amount</button>
+          </div>` : ''}
       </div>` : ''}
 
     ${isRejectedNotice ? `
@@ -1462,6 +1487,9 @@ async function disputeSettlement(id) {
 }
 
 function renderQueryForm() {
+  // Always clear previous query values
+  A.queryAmount = '';
+  A.queryNote   = '';
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="go('req_detail')" aria-label="Back">&#8249;</button>
@@ -1501,11 +1529,11 @@ function renderQueryForm() {
 }
 
 async function sendQuery() {
-  const qa = document.getElementById('q-amt'); if (qa) A.query.amount  = qa.value;
-  const qc = document.getElementById('q-cmt'); if (qc) A.query.comment = qc.value;
+  const amount = A.queryAmount || document.getElementById('q-amount')?.value;
+  const note   = A.queryNote   || document.getElementById('q-note')?.value   || '';
 
-  if (!A.query.amount || parseFloat(A.query.amount) <= 0) {
-    const el = document.getElementById('q-amt');
+  if (!amount || parseFloat(amount) <= 0) {
+    const el = document.getElementById('q-amount');
     if (el) el.style.borderColor = '#E24B4A';
     return;
   }
@@ -1513,11 +1541,44 @@ async function sendQuery() {
   try {
     await db.collection('claims').doc(A.selectedClaimId).update({
       status:         'queried',
-      counterAmount:  parseFloat(A.query.amount),
-      counterComment: A.query.comment || null,
+      counterAmount:  parseFloat(amount),
+      counterComment: note || null,
       updatedAt:      firebase.firestore.FieldValue.serverTimestamp()
     });
+    A.queryMode = 'choose';
     go('q_sent');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function uploadEvidence(claimId) {
+  const fileInput = document.getElementById('ev-file');
+  const file = fileInput?.files?.[0];
+  if (!file) { alert('Please select a file first.'); return; }
+  if (file.size > 10 * 1024 * 1024) { alert('File too large. Please use an image under 10MB.'); return; }
+  try {
+    const storage = firebase.storage();
+    const ref = storage.ref('claims/' + claimId + '/' + Date.now() + '_' + file.name);
+    await ref.put(file);
+    const url = await ref.getDownloadURL();
+    await db.collection('claims').doc(claimId).update({
+      evidenceUrl: url,
+      status: 'pending',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    go('req_detail');
+  } catch(e) { alert('Upload failed: ' + e.message); }
+}
+
+async function requestEvidence() {
+  const note = document.getElementById('q-ev-note')?.value.trim() || '';
+  try {
+    await db.collection('claims').doc(A.selectedClaimId).update({
+      status:        'evidence_requested',
+      evidenceNote:  note,
+      updatedAt:     firebase.firestore.FieldValue.serverTimestamp()
+    });
+    A.queryMode = 'choose';
+    go('home');
   } catch(e) { alert('Error: ' + e.message); }
 }
 
@@ -1654,11 +1715,26 @@ function renderPosDetail() {
       + '</div>';
   };
 
+  const netAmount = outstanding.reduce((sum, e) => {
+    return sum + (e.creditorUid === A.user.uid ? e.amount : -e.amount);
+  }, 0);
+
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="go('position')" aria-label="Back">&#8249;</button>
       <span class="screen-title">${esc(person.name)}</span>
     </div>
+    ${outstanding.length > 1 ? `
+      <div style="padding:8px 16px;">
+        ${A.confirmBulkSettle === pid
+          ? `<div style="background:var(--green-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid var(--green-100);">
+              <div style="font-size:13px;color:var(--green-800);margin-bottom:8px;">Settle all ${outstanding.length} items (net ${netAmount >= 0 ? '+' : ''}${fmt(Math.abs(netAmount))}) with ${esc(person.name)}?</div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="confirmBulkSettle('${pid}')" class="btn btn-green" style="padding:9px;">Yes, settle all</button>
+                <button onclick="A.confirmBulkSettle=null;render()" class="btn btn-ghost" style="padding:9px;">Cancel</button>
+              </div></div>`
+          : `<button class="btn btn-green" style="padding:11px;font-size:13px;" onclick="A.confirmBulkSettle='${pid}';render()">Settle all with ${esc(person.name)} &rarr;</button>`}
+      </div>` : ''}
     ${outstanding.length === 0 && settledHere.length === 0
       ? '<div class="empty">No transactions yet.</div>'
       : outstanding.map(e => makeRow(e, false)).join('')
@@ -2014,6 +2090,23 @@ function skipClaim(id) {
   if(next){A.selectedClaimId=next.id;go('req_detail');}else go('pending');
 }
 
+async function confirmBulkSettle(personId) {
+  A.confirmBulkSettle = null;
+  const outstanding = A.ledger.filter(c =>
+    (c.creditorUid === A.user.uid && c.debtorUid === personId) ||
+    (c.creditorUid === personId && c.debtorUid === A.user.uid)
+  );
+  const batch = db.batch();
+  const now = firebase.firestore.FieldValue.serverTimestamp();
+  outstanding.forEach(c => {
+    batch.update(db.collection('claims').doc(c.id), { status: 'settled', updatedAt: now });
+  });
+  try {
+    await batch.commit();
+    go('position');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
 async function removeConnection(id) {
   const updated=(A.connections||[]).filter(c=>c.id!==id);
   try { await db.collection('users').doc(A.user.uid).update({connections:updated}); A.connections=updated; render(); }
@@ -2343,10 +2436,11 @@ function subscribeToData(uid) {
 
       // Incoming & needs my action (including rejected claims the creditor hasn't dismissed)
       A.pendingClaims = all.filter(c =>
-        (c.status === 'pending'            && c.debtorUid   === uid) ||
-        (c.status === 'queried'            && c.creditorUid === uid) ||
-        (c.status === 'settlement_pending' && c.creditorUid === uid) ||
-        (c.status === 'rejected'           && c.creditorUid === uid && !c.creditorDismissed)
+        (c.status === 'pending'             && c.debtorUid   === uid) ||
+        (c.status === 'queried'             && c.creditorUid === uid) ||
+        (c.status === 'evidence_requested'  && c.creditorUid === uid) ||
+        (c.status === 'settlement_pending'  && c.creditorUid === uid) ||
+        (c.status === 'rejected'            && c.creditorUid === uid && !c.creditorDismissed)
       );
 
       // Outgoing awaiting response
