@@ -667,7 +667,7 @@ const PENDING_SCREENS = ['pending'];
 ================================================================ */
 function render() {
   const app = document.getElementById('app');
-  const showNav = !['loading','signin'].includes(A.screen);
+  const showNav = !['loading','signin','welcome'].includes(A.screen);
   const pendingCount = A.pendingClaims.length;
 
   const content = {
@@ -2018,24 +2018,23 @@ function renderPending() {
 ================================================================ */
 function renderWelcome() {
   return `
-    <div class="signin-screen" style="padding:32px 24px;gap:20px;">
+    <div class="signin-screen" style="padding:48px 24px 32px;gap:20px;">
       ${sheepSvg(72)}
       <div style="text-align:center;">
         <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:36px;color:var(--green-600);display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
         <p style="font-size:13px;color:var(--text-2);margin-top:6px;">Log it. Track it. Settle it.</p>
       </div>
-      <div style="max-width:300px;text-align:left;background:var(--bg-2,#f9f9f9);border-radius:var(--radius-md);padding:16px;border:0.5px solid var(--border);">
+      
         <div style="font-size:13px;line-height:1.85;color:var(--text-1);">
-          <div style="margin-bottom:10px;">ewe-o-me is an app for tracking money between friends and family.</div>
-          <div style="margin-bottom:8px;">&#128176;&nbsp; Send a <strong>You Owe Me</strong> when someone owes you, or an <strong>I Owe You</strong> when you owe them.</div>
-          <div style="margin-bottom:8px;">&#10003;&nbsp; The recipient of a You Owe Me can accept, query or reject the request — with everything staying on record for all parties.</div>
-          <div>&#128200;&nbsp; Your running balance with each person is shown in <strong>My Position</strong>, and when payments are made everything can be easily logged and settled.</div>
-        </div>
-          <div style="margin-bottom:8px;">&#128203; The other person accepts, queries, or rejects — everything stays on record.</div>
-          <div>&#128260; See your running balance with each person in <em>My Position</em>.</div>
+          <div style="max-width:300px;text-align:left;padding:0 8px;">
+        <div style="font-size:13px;line-height:1.85;color:var(--text-2);">
+          <div style="margin-bottom:12px;color:var(--text-1);">ewe-o-me is an app for tracking money between friends and family.</div>
+          <div style="margin-bottom:8px;">&#128176;&nbsp; Send a <strong style="color:var(--text-1);">You Owe Me</strong> when someone owes you, or an <strong style="color:var(--text-1);">I Owe You</strong> when you owe them.</div>
+          <div style="margin-bottom:8px;">&#10003;&nbsp; The recipient of a You Owe Me can accept, query or reject — with everything staying on record.</div>
+          <div>&#128200;&nbsp; Your running balance with each person is in <strong style="color:var(--text-1);">My Position</strong>, and settling up is easy when payments are made.</div>
         </div>
       </div>
-      <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px;">
+      <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px;align-items:center;">
         <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="dismissWelcome(false)">Get started</button>
         <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="dismissWelcome(true)">Read the full guide first</button>
       </div>
