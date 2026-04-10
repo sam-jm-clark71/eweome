@@ -1578,6 +1578,44 @@ async function uploadEvidence(claimId) {
   } catch(e) { alert('Upload failed: ' + e.message); }
 }
 
+function updateSearchResults() {
+  const q = (A.searchQuery || '').toLowerCase().trim();
+  const uid = A.user?.uid;
+  const all = [...(A.pendingClaims||[]), ...(A.sentClaims||[]), ...(A.ledger||[]), ...(A.settled||[])];
+  const results = q.length < 1 ? [] : all.filter(c => {
+    const desc = (c.description||'').toLowerCase();
+    const cred = (c.creditorName||'').toLowerCase();
+    const debt = (c.debtorName||'').toLowerCase();
+    const amt  = fmt(c.amount).toLowerCase();
+    const date = fmtDate(c.date||'').toLowerCase();
+    return desc.includes(q)||cred.includes(q)||debt.includes(q)||amt.includes(q)||date.includes(q);
+  });
+  const el = document.getElementById('search-results');
+  if (!el) return;
+  if (q.length < 1) {
+    el.innerHTML = '<div class="empty" style="padding-top:40px;">Type to search all your claims</div>';
+    return;
+  }
+  if (results.length === 0) {
+    el.innerHTML = '<div class="empty" style="padding-top:40px;">No results for &ldquo;' + esc(q) + '&rdquo;</div>';
+    return;
+  }
+  el.innerHTML = results.map(c => {
+    const iCr = c.creditorUid === uid;
+    const other = iCr ? c.debtorName : c.creditorName;
+    return '<div class="list-item" onclick="A.selectedClaimId=\'' + c.id + '\';go(\'req_detail\')">' +
+      '<div class="avatar">' + initials(other) + '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:14px;font-weight:500;">' + (esc(c.description)||'No description') + '</div>' +
+      '<div style="font-size:12px;color:var(--text-2);">' + esc(other) + ' &middot; ' + fmtDate(c.date) + '</div>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">' +
+      '<span style="font-size:14px;font-weight:500;color:' + (iCr?'var(--green-600)':'var(--red-600)') + ';">' + (iCr?'+':'-') + fmt(c.amount) + '</span>' +
+      tagForStatus(c.status) +
+      '</div></div>';
+  }).join('');
+}
+
 async function requestEvidence() {
   const note = document.getElementById('q-ev-note')?.value.trim() || '';
   try {
@@ -1665,10 +1703,10 @@ function renderPosition() {
           </div>`).join('')
     }
     
-    <div onclick="A.searchQuery='';go('search')" style="margin:12px 16px 80px;padding:14px 16px;background:var(--green-50);border:1px solid var(--green-100);border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;gap:12px;">
+    <div onclick="A.searchQuery='';go('search')" style="margin:12px 16px 80px;padding:14px 16px;background:var(--bg);border:1.5px solid var(--green-600);border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;gap:12px;">
       <div style="flex:1;">
-        <div style="font-size:14px;font-weight:500;color:var(--green-800);">Search past entries</div>
-        <div style="font-size:12px;color:var(--green-600);margin-top:2px;">Search all settled and outstanding claims</div>
+        <div style="font-size:14px;font-weight:500;color:var(--green-600);">Search past entries</div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:2px;">Search all settled and outstanding claims</div>
       </div>
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green-600)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     </div>`;
@@ -2238,9 +2276,10 @@ function renderSearch() {
     <div style="padding:12px 16px;">
       <div style="position:relative;">
         <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="search" id="search-input" class="input" placeholder="Search by description, person, amount..." style="padding-left:34px;" value="${esc(A.searchQuery||'')}" oninput="A.searchQuery=this.value;render()" autofocus aria-label="Search"/>
+        <input type="search" id="search-input" class="input" placeholder="Search by description, person, amount..." style="padding-left:34px;" value="${esc(A.searchQuery||'')}" oninput="A.searchQuery=this.value;updateSearchResults()" autofocus aria-label="Search"/>
       </div>
     </div>
+    <div id="search-results">
     ${q.length < 1
       ? '<div class="empty" style="padding-top:40px;">Type to search all your claims</div>'
       : results.length === 0
@@ -2259,7 +2298,7 @@ function renderSearch() {
               tagForStatus(c.status) +
               '</div></div>';
           }).join('')
-    }`;
+    }</div>`;
 }
 
 /* ================================================================
