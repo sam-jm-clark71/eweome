@@ -122,7 +122,7 @@
       -webkit-tap-highlight-color: transparent;
     }
     .nav-item.active { color: var(--green-600); }
-    .nav-item svg { width: 25px; height: 25px; fill: none; stroke-width: 2; }
+    .nav-item svg { width: 25px; height: 25px; stroke: currentColor; fill: none; stroke-width: 2; }
 
     /* ================================================================
        SCREEN HEADER
@@ -797,11 +797,11 @@ function render() {
       </button>
       <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517;' : ''}">
         ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
-        <svg viewBox="0 0 24 24" aria-hidden="true" style="fill:none;width:25px;height:25px;stroke-width:2;stroke:${A.pendingClaims.length > 0 ? '#BA7517' : 'currentColor'};">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
-        <span style="font-size:10px;${A.pendingClaims.length > 0 ? 'color:#BA7517;font-weight:600;' : ''}">Pending</span>
+        Pending
       </button>
       <button class="nav-item ${A.screen === 'settings' ? 'active' : ''}" onclick="go('settings')">
         <svg viewBox="0 0 24 24" aria-hidden="true">
