@@ -357,6 +357,26 @@
     .balance-card.red   .balance-amount { color: white; }
 
     /* ================================================================
+       TOAST & MODAL
+    ================================================================ */
+    #toast {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      background: #222; color: white; padding: 10px 18px; border-radius: 20px;
+      font-size: 13px; z-index: 9999; opacity: 0; transition: opacity 0.2s;
+      pointer-events: none; max-width: 80vw; text-align: center;
+    }
+    #toast.show { opacity: 1; }
+    #modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 9998; display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    #modal-box {
+      background: var(--bg); border-radius: var(--radius-lg);
+      padding: 20px; max-width: 300px; width: 100%;
+      border: 0.5px solid var(--border);
+    }
+    /* ================================================================
        SIGN-IN SCREEN
     ================================================================ */
     .signin-screen {
@@ -435,8 +455,51 @@
 <div id="app">
   <div class="loading">Loading&hellip;</div>
 </div>
+<div id="toast"></div>
+<div id="modal-overlay" style="display:none;">
+  <div id="modal-box">
+    <div id="modal-msg" style="font-size:14px;line-height:1.6;margin-bottom:16px;"></div>
+    <div id="modal-btns" style="display:flex;gap:8px;justify-content:flex-end;"></div>
+  </div>
+</div>
 
 <script>
+/* ================================================================
+   TOAST & MODAL HELPERS
+================================================================ */
+let _toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function showModal(msg, buttons) {
+  const overlay = document.getElementById('modal-overlay');
+  const msgEl   = document.getElementById('modal-msg');
+  const btnsEl  = document.getElementById('modal-btns');
+  if (!overlay) return;
+  msgEl.innerHTML = msg;
+  btnsEl.innerHTML = '';
+  buttons.forEach(b => {
+    const btn = document.createElement('button');
+    btn.textContent = b.label;
+    btn.className = 'btn ' + (b.style||'btn-ghost');
+    btn.style.cssText = 'padding:9px 16px;font-size:13px;';
+    btn.onclick = () => { overlay.style.display = 'none'; b.action(); };
+    btnsEl.appendChild(btn);
+  });
+  overlay.style.display = 'flex';
+}
+
+function closeModal() {
+  const overlay = document.getElementById('modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
 /* ================================================================
    FIREBASE CONFIG
    Replace the placeholder values below with your own config from:
@@ -732,13 +795,13 @@ function render() {
         </svg>
         My position
       </button>
-      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517 !important;' : ''}">
+      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;">
         ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
-        <svg viewBox="0 0 24 24" aria-hidden="true" style="stroke:${A.pendingClaims.length > 0 ? '#BA7517' : 'currentColor'};">
+        <svg viewBox="0 0 24 24" aria-hidden="true" stroke="${A.pendingClaims.length > 0 ? '#BA7517' : 'currentColor'}" style="fill:none;width:25px;height:25px;stroke-width:2;">
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
-        <span style="${A.pendingClaims.length > 0 ? 'color:#BA7517 !important;font-weight:600;' : ''}">Pending</span>
+        <span style="font-size:10px;${A.pendingClaims.length > 0 ? 'color:#BA7517;font-weight:600;' : ''}">Pending</span>
       </button>
       <button class="nav-item ${A.screen === 'settings' ? 'active' : ''}" onclick="go('settings')">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -821,7 +884,7 @@ function renderHome() {
       </div>
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(8px,3vh,24px) 16px;gap:clamp(8px,3vh,24px);">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(12px,4vh,32px) 16px;gap:clamp(12px,4vh,32px);">
       <button class="circle-btn circle-green" onclick="startClaim('eweome')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">YOU</span>
@@ -916,7 +979,7 @@ function proceedMulti() {
 
 function selectPerson(id, name) {
   if (id === A.user.uid) {
-    alert("You can't send a claim to yourself.");
+    showToast("You can't send a claim to yourself.");
     return;
   }
   A.claim.personId   = id;
@@ -1137,7 +1200,7 @@ async function sendMultiClaim() {
     });
   }
   try { await batch.commit(); go('ew_sent'); }
-  catch(e) { alert('Error: ' + e.message); }
+  catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function sendClaim() {
@@ -1154,12 +1217,16 @@ async function sendClaim() {
     (c.date || '') >= weekStr
   );
   if (dup) {
-    const ok = confirm(
-      'Heads up: you already sent ' + esc(A.claim.personName) + ' a claim for ' + fmt(A.claim.amount) +
-      ' on ' + fmtDate(dup.date) + ' (' + (esc(dup.description)||'no description') + ').' +
-      '\n\nIs this a duplicate? Press Cancel to go back, or OK to send anyway.'
-    );
-    if (!ok) return;
+    await new Promise(resolve => {
+      showModal(
+        'Heads up — you already sent ' + esc(A.claim.personName) + ' a claim for ' + fmt(A.claim.amount) +
+        ' on ' + fmtDate(dup.date) + '. Is this a duplicate?',
+        [
+          { label: 'Send anyway', style: 'btn-green', action: () => resolve(true) },
+          { label: 'Go back', style: 'btn-ghost', action: () => resolve(false) }
+        ]
+      );
+    }).then(ok => { if (!ok) throw new Error('CANCELLED'); });
   }
   const io       = A.claim.type === 'ioowe';
   const credUid  = io ? A.claim.personId           : A.user.uid;
@@ -1192,7 +1259,7 @@ async function sendClaim() {
     A._lastSentId = docRef ? docRef.id : null;
     go(pfx() + '_sent');
   } catch (e) {
-    alert('Error sending claim. Please try again.\n\n' + e.message);
+    if (e.message !== 'CANCELLED') showToast('Could not send claim. Please try again.');
   }
 }
 
@@ -1370,7 +1437,7 @@ async function acceptClaim(id) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     goNextPending();
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function acceptCounter(id, counterAmount) {
@@ -1381,7 +1448,7 @@ async function acceptCounter(id, counterAmount) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     goNextPending();
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function rejectClaim(id) {
@@ -1391,7 +1458,7 @@ async function rejectClaim(id) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     goNextPending();
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 /* ================================================================
@@ -1436,7 +1503,7 @@ async function confirmReject(id) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     goNextPending();
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 function goNextPending() {
@@ -1451,7 +1518,7 @@ async function dismissRejected(id) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     go('home');
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function markSettled(id) {
@@ -1472,7 +1539,7 @@ async function markSettled(id) {
       });
     }
     go('home');
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function confirmSettlement(id) {
@@ -1483,7 +1550,7 @@ async function confirmSettlement(id) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     goNextPending();
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function disputeSettlement(id) {
@@ -1494,7 +1561,7 @@ async function disputeSettlement(id) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     goNextPending();
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 function renderQueryForm() {
@@ -1558,14 +1625,14 @@ async function sendQuery() {
     });
     A.queryMode = 'choose';
     go('q_sent');
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function uploadEvidence(claimId) {
   const fileInput = document.getElementById('ev-file');
   const file = fileInput?.files?.[0];
-  if (!file) { alert('Please select a file first.'); return; }
-  if (file.size > 10 * 1024 * 1024) { alert('File too large. Please use an image under 10MB.'); return; }
+  if (!file) { showToast('Please select a file first.'); return; }
+  if (file.size > 10 * 1024 * 1024) { showToast('File is too large. Please use an image under 10MB.'); return; }
   try {
     const storage = firebase.storage();
     const ref = storage.ref('claims/' + claimId + '/' + Date.now() + '_' + file.name);
@@ -1577,7 +1644,7 @@ async function uploadEvidence(claimId) {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     go('req_detail');
-  } catch(e) { alert('Upload failed: ' + e.message); }
+  } catch(e) { showToast('Upload failed. Please try again.'); }
 }
 
 function updateSearchResults() {
@@ -1628,7 +1695,7 @@ async function requestEvidence() {
     });
     A.queryMode = 'choose';
     go('home');
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 function renderQuerySent() {
@@ -1874,7 +1941,7 @@ async function sendRecurring(originalId) {
     checkDueClaims();
     if (A.dueClaims.length > 0) render();
     else go('home');
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function dismissDue(originalId) {
@@ -1889,7 +1956,7 @@ async function dismissDue(originalId) {
     checkDueClaims();
     if (A.dueClaims.length > 0) render();
     else go('home');
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 /* ================================================================
@@ -2299,13 +2366,13 @@ async function updateNote(id) {
   const amount = document.getElementById('edit-note-amount')?.value || '';
   const body   = document.getElementById('edit-note-body')?.value.trim() || '';
   const dir    = document.getElementById('edit-dir-owe')?.style.opacity === '1' ? 'owe' : 'owed';
-  if (!title) { alert('Please add a title.'); return; }
+  if (!title) { showToast('Please add a title for the note.'); return; }
   const updates = { title, person, amount: amount ? parseFloat(amount) : null, direction: dir, body, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
   try {
     await db.collection('users').doc(A.user.uid).collection('notes').doc(id).update(updates);
     A.notes = (A.notes||[]).map(n => n.id === id ? {...n, ...updates} : n);
     go('pending');
-  } catch(e) { alert('Error saving: ' + e.message); }
+  } catch(e) { showToast('Could not save changes. Please try again.'); }
 }
 
 async function saveNote() {
@@ -2314,22 +2381,26 @@ async function saveNote() {
   const amount = document.getElementById('note-amount')?.value || '';
   const body   = document.getElementById('note-body')?.value.trim() || '';
   const dir    = document.getElementById('dir-owe')?.style.opacity === '1' ? 'owe' : 'owed';
-  if (!title) { alert('Please add a title for the note.'); return; }
+  if (!title) { showToast('Please add a title for the note.'); return; }
   const note = { title, person, amount: amount ? parseFloat(amount) : null, direction: dir, body, date: today(), createdAt: firebase.firestore.FieldValue.serverTimestamp() };
   try {
     const ref = await db.collection('users').doc(A.user.uid).collection('notes').add(note);
     A.notes = [{ id: ref.id, ...note, createdAt: new Date().toISOString() }, ...(A.notes||[])];
     go('notes');
-  } catch(e) { alert('Error saving note: ' + e.message); }
+  } catch(e) { showToast('Could not save note. Please try again.'); }
 }
 
 async function deleteNote(id) {
-  if (!confirm('Delete this note?')) return;
-  try {
-    await db.collection('users').doc(A.user.uid).collection('notes').doc(id).delete();
-    A.notes = (A.notes||[]).filter(n => n.id !== id);
-    render();
-  } catch(e) { alert('Error: ' + e.message); }
+  showModal('Delete this note? This cannot be undone.', [
+    { label: 'Delete', style: 'btn-red', action: async () => {
+      try {
+        await db.collection('users').doc(A.user.uid).collection('notes').doc(id).delete();
+        A.notes = (A.notes||[]).filter(n => n.id !== id);
+        render();
+      } catch(e) { showToast('Could not delete note.'); }
+    }},
+    { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+  ]);
 }
 
 function convertNoteToClaimPrompt(id) {
@@ -2503,13 +2574,13 @@ async function confirmBulkSettle(personId) {
   try {
     await batch.commit();
     go('position');
-  } catch(e) { alert('Error: ' + e.message); }
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function removeConnection(id) {
   const updated=(A.connections||[]).filter(c=>c.id!==id);
   try { await db.collection('users').doc(A.user.uid).update({connections:updated}); A.connections=updated; render(); }
-  catch(e){alert('Error: '+e.message);}
+  catch(e){showToast('Something went wrong. Please try again.');}
 }
 
 /* ================================================================
@@ -2625,7 +2696,7 @@ async function addMultipleContacts(contacts) {
     A.connections=merged;
     const back=A.claim&&A.claim.type?(A.claim.type==='ioowe'?'io_who':'ew_who'):'settings';
     go(back);
-  }catch(e){alert('Error: '+e.message);}
+  }catch(e){showToast('Something went wrong. Please try again.');}
 }
 
 async function addConnection() {
@@ -2671,7 +2742,7 @@ async function addConnection() {
       go('settings');
     }
   } catch(e) {
-    alert('Error adding connection.\n\n' + e.message);
+    showToast('Could not add connection. Please try again.');
   }
 }
 
