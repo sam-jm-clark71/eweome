@@ -501,6 +501,7 @@ const A = {
   showAllHistory: false,
   searchQuery: '',
   notes: [],
+  _editNoteId: null,
   welcomeSeen: false,
   _helpOpen: {}
 };
@@ -700,6 +701,7 @@ function render() {
     search:          renderSearch,
     notes:           renderNotes,
     new_note:        renderNewNote,
+    edit_note:       renderEditNote,
     welcome:         renderWelcome,
     help:            renderHelp,
     merge_accounts: renderMergeAccounts,
@@ -730,13 +732,13 @@ function render() {
         </svg>
         My position
       </button>
-      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517;' : ''}">
+      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517 !important;' : ''}">
         ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
-        <svg viewBox="0 0 24 24" aria-hidden="true" style="${A.pendingClaims.length > 0 ? 'stroke:#BA7517;' : ''}">
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="stroke:${A.pendingClaims.length > 0 ? '#BA7517' : 'currentColor'};">
           <circle cx="12" cy="12" r="10"/>
           <polyline points="12 6 12 12 16 14"/>
         </svg>
-        <span style="${A.pendingClaims.length > 0 ? 'color:#BA7517;font-weight:500;' : ''}">Pending</span>
+        <span style="${A.pendingClaims.length > 0 ? 'color:#BA7517 !important;font-weight:600;' : ''}">Pending</span>
       </button>
       <button class="nav-item ${A.screen === 'settings' ? 'active' : ''}" onclick="go('settings')">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2027,7 +2029,7 @@ function renderPending() {
           + '<span class="tag tag-amber" style="flex-shrink:0;">Waiting</span></div>';
       }).join('')}
     ` : ''}
-    ${incoming.length === 0 && outgoing.length === 0 ? `
+    ${incoming.length === 0 && outgoing.length === 0 && !(A.notes&&A.notes.length>0) ? `
       <div style="padding:32px 24px;text-align:center;">
         <div style="font-size:32px;margin-bottom:12px;">&#10003;</div>
         <div style="font-size:17px;font-weight:500;margin-bottom:8px;">All caught up!</div>
@@ -2036,7 +2038,28 @@ function renderPending() {
         <div style="font-size:13px;color:var(--text-2);margin-bottom:12px;">Want to jot something down before you forget?</div>
         <button class="btn btn-ghost" style="padding:11px 20px;font-size:13px;" onclick="go('new_note')">&#128221; Add a quick note</button>
       </div>` : ''}
-    ${incoming.length > 0 || outgoing.length > 0 ? '<div style="padding:12px 16px;border-top:0.5px solid var(--border);margin-top:4px;"><button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A._pendingShown=true;go(\'home\')">Do this later &rarr;</button></div>' : ''}`;
+    ${incoming.length > 0 || outgoing.length > 0 ? '<div style="padding:12px 16px;border-top:0.5px solid var(--border);margin-top:4px;"><button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A._pendingShown=true;go(\'home\')">Do this later &rarr;</button></div>' : ''}
+    ${(A.notes&&A.notes.length>0) ? `
+      <div style="padding:12px 16px 6px;border-top:0.5px solid var(--border);margin-top:4px;">
+        <div style="font-size:12px;font-weight:500;color:var(--text-2);margin-bottom:2px;">Notes</div>
+      </div>
+      ${A.notes.map(n => `
+        <div style="padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:flex-start;gap:12px;">
+          <div style="font-size:18px;flex-shrink:0;margin-top:1px;">&#128221;</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:500;margin-bottom:2px;">${esc(n.title||'Untitled note')}</div>
+            ${n.amount ? `<div style="font-size:12px;color:var(--text-2);">${n.direction==='owe'?'I owe':'Owed to me'}: ${fmt(n.amount)}</div>` : ''}
+            ${n.person ? `<div style="font-size:12px;color:var(--text-2);">${esc(n.person)}</div>` : ''}
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button onclick="editNote('${n.id}')" class="btn btn-green" style="font-size:12px;padding:7px 12px;">Edit</button>
+              <button onclick="convertNoteToClaimPrompt('${n.id}')" class="btn btn-ghost" style="font-size:12px;padding:7px 10px;">Send as claim</button>
+              <button onclick="deleteNote('${n.id}')" class="btn btn-ghost" style="font-size:12px;padding:7px 10px;color:var(--red-600);border-color:var(--red-100);">Delete</button>
+            </div>
+          </div>
+        </div>`).join('')}
+      <div style="padding:10px 16px;">
+        <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="go('new_note')">+ Add a note</button>
+      </div>` : ''}`;
 }
 
 /* ================================================================
@@ -2180,7 +2203,8 @@ function renderNotes() {
               <div style="font-size:11px;color:var(--text-3);margin-top:4px;">${fmtDate(n.date||'')}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
-              <button onclick="convertNoteToClaimPrompt('${n.id}')" style="background:none;border:none;font-size:12px;color:var(--green-600);cursor:pointer;padding:2px;">Send claim</button>
+              <button onclick="editNote('${n.id}')" style="background:none;border:none;font-size:12px;color:var(--green-600);font-weight:500;cursor:pointer;padding:2px;">Edit</button>
+              <button onclick="convertNoteToClaimPrompt('${n.id}')" style="background:none;border:none;font-size:12px;color:var(--text-2);cursor:pointer;padding:2px;">Send claim</button>
               <button onclick="deleteNote('${n.id}')" style="background:none;border:none;font-size:12px;color:var(--red-600);cursor:pointer;padding:2px;">Delete</button>
             </div>
           </div>`).join('')
@@ -2222,6 +2246,66 @@ function renderNewNote() {
       </div>
       <button class="btn btn-green" style="padding:13px;" onclick="saveNote()">Save note</button>
     </div>`;
+}
+
+function editNote(id) {
+  A._editNoteId = id;
+  go('edit_note');
+}
+
+function renderEditNote() {
+  const n = (A.notes||[]).find(n => n.id === A._editNoteId);
+  if (!n) return `<div class="empty">Note not found.</div>`;
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('pending')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Edit note</span>
+    </div>
+    <div style="padding:20px 16px;display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <label class="field-label">What's the note about?</label>
+        <input type="text" id="edit-note-title" class="input" placeholder="e.g. Dinner at Mario's" value="${esc(n.title||'')}" aria-label="Note title"/>
+      </div>
+      <div>
+        <label class="field-label">Person (optional)</label>
+        <input type="text" id="edit-note-person" class="input" placeholder="Who is this about?" value="${esc(n.person||'')}" aria-label="Person"/>
+      </div>
+      <div>
+        <label class="field-label">Amount (optional)</label>
+        <div class="amount-wrap">
+          <span class="amount-symbol">£</span>
+          <input type="number" id="edit-note-amount" class="amount-input" placeholder="0.00" step="0.01" min="0" value="${n.amount||''}" aria-label="Amount"/>
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Direction</label>
+        <div style="display:flex;gap:8px;">
+          <button id="edit-dir-owed" class="btn btn-green" style="flex:1;padding:10px;${n.direction!=='owe'?'':'opacity:0.4;'}" onclick="document.getElementById('edit-dir-owed').style.opacity='1';document.getElementById('edit-dir-owe').style.opacity='0.4';">Owed to me</button>
+          <button id="edit-dir-owe" class="btn btn-amber" style="flex:1;padding:10px;${n.direction==='owe'?'':'opacity:0.4;'}" onclick="document.getElementById('edit-dir-owe').style.opacity='1';document.getElementById('edit-dir-owed').style.opacity='0.4';">I owe them</button>
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Extra notes (optional)</label>
+        <textarea id="edit-note-body" class="input" rows="3" placeholder="Any extra details..." style="resize:none;">${esc(n.body||'')}</textarea>
+      </div>
+      <button class="btn btn-green" style="padding:13px;" onclick="updateNote('${n.id}')">Save changes</button>
+      <button class="btn btn-ghost" style="padding:11px;" onclick="convertNoteToClaimPrompt('${n.id}')">Turn into a claim</button>
+    </div>`;
+}
+
+async function updateNote(id) {
+  const title  = document.getElementById('edit-note-title')?.value.trim();
+  const person = document.getElementById('edit-note-person')?.value.trim() || '';
+  const amount = document.getElementById('edit-note-amount')?.value || '';
+  const body   = document.getElementById('edit-note-body')?.value.trim() || '';
+  const dir    = document.getElementById('edit-dir-owe')?.style.opacity === '1' ? 'owe' : 'owed';
+  if (!title) { alert('Please add a title.'); return; }
+  const updates = { title, person, amount: amount ? parseFloat(amount) : null, direction: dir, body, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+  try {
+    await db.collection('users').doc(A.user.uid).collection('notes').doc(id).update(updates);
+    A.notes = (A.notes||[]).map(n => n.id === id ? {...n, ...updates} : n);
+    go('pending');
+  } catch(e) { alert('Error saving: ' + e.message); }
 }
 
 async function saveNote() {
@@ -2458,11 +2542,11 @@ function renderSettings() {
         </div>`).join('')}
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;margin-top:10px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
     </div>
-    <div class="settings-card">
+    <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:6px;">Notes</div>
       <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:12px;">Jot down a quick debt reminder without sending a formal request. Convert to a claim later.</p>
       <button class="btn btn-green" style="font-size:13px;padding:11px;margin-bottom:8px;" onclick="go('new_note')">+ Add a new note</button>
-      ${(A.notes&&A.notes.length>0) ? `<button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="go('notes')">View my notes (${A.notes.length})</button>` : ''}
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="go('notes')">See all notes${(A.notes&&A.notes.length>0)?' ('+A.notes.length+')':''}</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:2px;">Currency</div>
