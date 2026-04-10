@@ -1094,7 +1094,7 @@ function renderDesc() {
         </div>
       </label>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
-        <input type="checkbox" id="recurring" style="width:18px;height:18px;accent-color:#3B6D11;" ${A.claim.recurring?"checked":""} onchange="A.claim.recurring=this.checked;render()"/>
+        <input type="checkbox" id="recurring" style="width:18px;height:18px;accent-color:#3B6D11;" ${A.claim.recurring?"checked":""} onchange="A.claim.recurring=this.checked;if(this.checked&&!A.claim.recurrence.freq)A.claim.recurrence={freq:'monthly',day:'Monday',dayOfMonth:1};render()"/>
         <div>
           <div style="font-size:14px;font-weight:500;">Recurring request</div>
           <div style="font-size:12px;color:var(--text-2);margin-top:2px;">Prompt me to re-send this on a schedule</div>
@@ -1583,25 +1583,25 @@ function renderQueryForm() {
       <label class="field-label">Amount you agree to (&pound;)</label>
       <input
         type="number"
-        id="q-amt"
+        id="q-amount"
         class="input"
         placeholder="0.00"
         step="0.01"
         inputmode="decimal"
-        value="${esc(A.query.amount)}"
-        oninput="A.query.amount=this.value"
+        value="${A.queryAmount||''}"
+        oninput="A.queryAmount=this.value"
         style="margin-bottom:14px;"
         aria-label="Counter amount"
       />
       <label class="field-label">Comments <span style="color:var(--text-3);">(optional)</span></label>
       <textarea
-        id="q-cmt"
+        id="q-note"
         class="input"
         style="height:68px;"
         placeholder="e.g. I only had the starter, not the main…"
-        oninput="A.query.comment=this.value"
+        oninput="A.queryNote=this.value"
         aria-label="Comment"
-      >${esc(A.query.comment)}</textarea>
+      >${A.queryNote||''}</textarea>
     </div>
     <div style="padding:0 16px;">
       <button class="btn btn-amber" style="padding:13px;" onclick="sendQuery()">Send counter-offer</button>
@@ -1857,10 +1857,11 @@ function renderPosDetail() {
    RECURRING CLAIMS
 ================================================================ */
 function nextDueDate(recurrence, fromDate) {
+  if (!recurrence) recurrence = { freq: 'monthly', dayOfMonth: 1 };
   const d = fromDate ? new Date(fromDate) : new Date();
   if (recurrence.freq === 'weekly' || recurrence.freq === 'fortnightly') {
     const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    const targetDay = days.indexOf(recurrence.day);
+    const targetDay = days.indexOf(recurrence.day || 'Monday');
     const step = recurrence.freq === 'fortnightly' ? 14 : 7;
     const next = new Date(d);
     next.setDate(next.getDate() + step);
