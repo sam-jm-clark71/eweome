@@ -1664,27 +1664,8 @@ function renderPosition() {
             <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
           </div>`).join('')
     }
-    ${A.settled.length > 0 ? `
-      <div style="padding:14px 16px 6px;border-top:0.5px solid var(--border);margin-top:4px;">
-        <div style="font-size:13px;font-weight:500;color:var(--text-2);">Recent settlements</div>
-      </div>
-      ${A.settled.slice(0,3).map(e => {
-        const iCr = e.creditorUid === A.user.uid;
-        const other = iCr ? e.debtorName : e.creditorName;
-        return '<div class="list-item" style="opacity:0.7;">'
-          + '<div style="flex:1;">'
-          + '<div style="font-size:14px;font-weight:500;">' + (esc(e.description)||'No description') + '</div>'
-          + '<div style="font-size:12px;color:var(--text-2);">' + esc(other) + ' &middot; ' + fmtDate(e.date) + '</div>'
-          + '</div>'
-          + '<div style="font-size:14px;font-weight:500;color:' + (iCr?'var(--green-600)':'var(--red-600)') + ';">'
-          + (iCr?'+':'-') + fmt(e.amount) + '</div></div>';
-      }).join('')}
-      ${A.settled.length > 3 ? `
-        <div class="list-item" onclick="go('pos_history')" style="justify-content:center;color:var(--green-600);font-size:14px;">
-          See all history (${A.settled.length} transactions) &#8250;
-        </div>` : ''}
-    ` : ''}
-    <div onclick="A.searchQuery='';go('search')" style="margin:12px 16px 8px;padding:14px 16px;background:var(--green-50);border:1px solid var(--green-100);border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;gap:12px;">
+    
+    <div onclick="A.searchQuery='';go('search')" style="margin:12px 16px 80px;padding:14px 16px;background:var(--green-50);border:1px solid var(--green-100);border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;gap:12px;">
       <div style="flex:1;">
         <div style="font-size:14px;font-weight:500;color:var(--green-800);">Search past entries</div>
         <div style="font-size:12px;color:var(--green-600);margin-top:2px;">Search all settled and outstanding claims</div>
