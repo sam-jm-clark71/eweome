@@ -905,7 +905,7 @@ function renderHome() {
 }
 
 function startClaim(type) {
-  A.claim = { type, personId: null, personName: null, amount: '', date: today(), desc: '' };
+  A.claim = { type, personId: null, personName: null, amount: '', date: today(), desc: '', onAccount: false, recurring: false, recurrence: { freq: 'monthly', day: 'Monday', dayOfMonth: 1 }, recipients: [] };
   go(type === 'eweome' ? 'ew_who' : 'io_who');
 }
 
@@ -1094,13 +1094,13 @@ function renderDesc() {
         </div>
       </label>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
-        <input type="checkbox" id="recurring" style="width:18px;height:18px;accent-color:#3B6D11;" ${A.claim.recurring?"checked":""} onchange="A.claim.recurring=this.checked;if(this.checked&&!A.claim.recurrence.freq)A.claim.recurrence={freq:'monthly',day:'Monday',dayOfMonth:1};render()"/>
+        <input type="checkbox" id="recurring" style="width:18px;height:18px;accent-color:#3B6D11;" ${A.claim.recurring?"checked":""} onchange="A.claim.recurring=this.checked;if(this.checked){if(!A.claim.recurrence||!A.claim.recurrence.freq)A.claim.recurrence={freq:'monthly',day:'Monday',dayOfMonth:1};}else{A.claim.recurrence={freq:'monthly',day:'Monday',dayOfMonth:1};}render()"/>
         <div>
           <div style="font-size:14px;font-weight:500;">Recurring request</div>
           <div style="font-size:12px;color:var(--text-2);margin-top:2px;">Prompt me to re-send this on a schedule</div>
         </div>
       </label>
-      ${A.claim.recurring ? `
+      ${A.claim.recurring === true ? `
         <div style="padding:12px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);display:flex;flex-direction:column;gap:10px;">
           <div>
             <label class="field-label">Frequency</label>
@@ -1261,7 +1261,10 @@ async function sendClaim() {
     A._lastSentId = docRef ? docRef.id : null;
     go(pfx() + '_sent');
   } catch (e) {
-    if (e.message !== 'CANCELLED') showToast('Could not send claim. Please try again.');
+    if (e.message !== 'CANCELLED') {
+      console.error('sendClaim error:', e.code, e.message);
+      showToast('Could not send claim: ' + (e.code || e.message || 'unknown error'));
+    }
   }
 }
 
@@ -1709,7 +1712,7 @@ function renderQuerySent() {
       </svg>
       <div style="font-size:20px;font-weight:500;">Counter sent</div>
       <div style="font-size:14px;color:var(--text-2);line-height:1.8;">
-        You've proposed <strong>${fmt(A.query.amount)}</strong> instead.<br>
+        You've proposed <strong>${fmt(A.queryAmount)}</strong> instead.<br>
         They'll be notified and can accept or reject.
       </div>
       <button class="btn btn-green" style="margin-top:16px;padding:13px;" onclick="go('home')">Back to home</button>
