@@ -123,6 +123,8 @@
     }
     .nav-item.active { color: var(--green-600); }
     .nav-item svg { width: 25px; height: 25px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .nav-item.pending-alert { color: #BA7517 !important; }
+    .nav-item.pending-alert svg { stroke: #BA7517 !important; }
 
     /* ================================================================
        SCREEN HEADER
@@ -795,7 +797,7 @@ function render() {
         </svg>
         My position
       </button>
-      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('pending')" style="position:relative;${A.pendingClaims.length > 0 ? 'color:#BA7517;' : ''}">
+      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''} ${A.pendingClaims.length > 0 ? 'pending-alert' : ''}" onclick="go('pending')" style="position:relative;">
         ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/>
