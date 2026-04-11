@@ -494,13 +494,7 @@ async function sendPushNotification(toUid, title, body) {
   } catch(e) { console.log('Could not queue notification:', e.message); }
 }
 
-// Listen for foreground messages
-if (messaging) {
-  messaging.onMessage(payload => {
-    const { title, body } = payload.notification || {};
-    if (title) showToast(title + (body ? ': ' + body : ''));
-  });
-}
+// Foreground message listener set up after messaging init
 
 /* ================================================================
    TOAST & MODAL HELPERS
@@ -558,6 +552,12 @@ const db   = firebase.firestore();
 const VAPID_KEY = 'BAd4zGsgemk1Yx5d0I4IP-g1LHw8nVW50a2LVRvrWVNEAhLNlL-d6VvnR9ww26Qd5-inISqsFctDDlXMJ3xm0UY';
 let messaging = null;
 try { if (typeof firebase.messaging === 'function') messaging = firebase.messaging(); } catch(e) { console.log('Messaging not supported:', e.message); }
+if (messaging) {
+  messaging.onMessage(payload => {
+    const { title, body } = payload.notification || {};
+    if (title) showToast(title + (body ? ': ' + body : ''));
+  });
+}
 
 /* ================================================================
    APP STATE
