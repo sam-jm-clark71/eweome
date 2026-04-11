@@ -469,6 +469,15 @@
 /* ================================================================
    PUSH NOTIFICATIONS
 ================================================================ */
+// Called by Android APK after sign-in to save native FCM token
+window.saveNativeFcmToken = async function(uid, token) {
+  if (!uid || !token) return;
+  try {
+    await db.collection('users').doc(uid).update({ fcmToken: token, fcmUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    console.log('Native FCM token saved for', uid);
+  } catch(e) { console.log('Could not save native FCM token:', e.message); }
+};
+
 async function requestNotificationPermission(uid) {
   if (!messaging) return;
   try {
@@ -1435,8 +1444,8 @@ function renderReqDetail() {
     ${claim.status === 'evidence_requested' && iAmCreditor ? `
       <div style="padding:12px 16px;margin:8px 16px 0;background:var(--amber-50);border-radius:var(--radius-sm);border:0.5px solid var(--amber-100);">
         <p style="font-size:13px;color:var(--amber-700);line-height:1.6;margin-bottom:10px;">
-          ${esc(claim.debtorName)} has requested evidence for this claim.
-          ${claim.evidenceNote ? '<br><em>' + esc(claim.evidenceNote) + '</em>' : ''}
+          ${esc(claim.debtorName)} has requested evidence before deciding.
+          ${claim.evidenceNote ? '<br><em>Their message: ' + esc(claim.evidenceNote) + '</em>' : ''}
         </p>
         <label class="field-label">Upload a photo or receipt</label>
         <input type="file" id="ev-file" accept="image/*,application/pdf" style="display:none;" onchange="handleEvidenceFile('${claim.id}')"/>
@@ -1450,13 +1459,16 @@ function renderReqDetail() {
 
     ${claim.status === 'evidence_requested' && iAmDebtor ? `
       <div style="padding:12px 16px;margin:8px 16px 0;background:var(--amber-50);border-radius:var(--radius-sm);border:0.5px solid var(--amber-100);">
-        <p style="font-size:13px;color:var(--amber-700);line-height:1.6;">You've requested evidence from ${esc(claim.creditorName)}. Waiting for them to upload.</p>
-        ${claim.evidenceUrl ? `
-          <div style="margin-top:10px;"><a href="${esc(claim.evidenceUrl)}" target="_blank" style="font-size:13px;color:var(--green-600);">&#128247; View uploaded evidence</a></div>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
-            <button class="btn btn-green" style="padding:11px;" onclick="acceptClaim('${claim.id}')">Accept claim &#10003;</button>
-            <button class="btn btn-amber" style="padding:11px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='amount';go('q_form')">Still query the amount</button>
-          </div>` : ''}
+        ${!claim.evidenceUrl ? `
+          <p style="font-size:13px;color:var(--amber-700);line-height:1.6;">You've requested evidence from ${esc(claim.creditorName)}. Waiting for them to upload.</p>`
+        : `
+          <p style="font-size:13px;color:var(--amber-700);line-height:1.6;margin-bottom:10px;"><strong>${esc(claim.creditorName)} has uploaded evidence.</strong> Review it and decide.</p>
+          <a href="${esc(claim.evidenceUrl)}" target="_blank" class="btn btn-green" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;text-decoration:none;">&#128247; View uploaded evidence</a>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="btn btn-green" style="padding:11px;" onclick="acceptClaim('${claim.id}')">Accept this claim &#10003;</button>
+            <button class="btn btn-amber" style="padding:11px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='amount';go('q_form')">Still want a different amount</button>
+            <button class="btn btn-red" style="padding:11px;" onclick="startReject('${claim.id}')">Reject this claim</button>
+          </div>`}
       </div>` : ''}
 
     ${isRejectedNotice ? `
@@ -1816,10 +1828,11 @@ function renderQuerySent() {
         <circle cx="30" cy="30" r="28" fill="#FAEEDA" stroke="#FAC775" stroke-width="1.5"/>
         <text x="30" y="39" text-anchor="middle" font-size="26" fill="#633806">?</text>
       </svg>
-      <div style="font-size:20px;font-weight:500;">Counter sent</div>
+      <div style="font-size:20px;font-weight:500;">Counter-offer sent</div>
       <div style="font-size:14px;color:var(--text-2);line-height:1.8;">
-        You've proposed <strong>${fmt(A.queryAmount)}</strong> instead.<br>
-        They'll be notified and can accept or reject.
+        You've proposed <strong>${fmt(A.queryAmount)}</strong> instead of the original amount.<br>
+        ${A.queryNote ? '<em>&ldquo;' + esc(A.queryNote) + '&rdquo;</em><br>' : ''}
+        The other person will be notified and can accept or reject your counter.
       </div>
       <button class="btn btn-green" style="margin-top:16px;padding:13px;" onclick="go('home')">Back to home</button>
     </div>`;
@@ -3056,6 +3069,7 @@ function subscribeToData(uid) {
         (c.status === 'pending'             && c.debtorUid   === uid) ||
         (c.status === 'queried'             && c.creditorUid === uid) ||
         (c.status === 'evidence_requested'  && c.creditorUid === uid) ||
+        (c.status === 'evidence_requested'  && c.debtorUid   === uid && c.evidenceUrl) ||
         (c.status === 'settlement_pending'  && c.creditorUid === uid) ||
         (c.status === 'rejected'            && c.creditorUid === uid && !c.creditorDismissed)
       );
@@ -3098,6 +3112,7 @@ auth.onAuthStateChanged(async fbUser => {
     await ensureUserDoc(fbUser);
     subscribeToData(fbUser.uid);
     requestNotificationPermission(fbUser.uid);
+    if (window.AndroidBridge) window.AndroidBridge.saveFcmToken(fbUser.uid);
     if (A.needsOnboarding) go('onboarding');
     else if (!A.welcomeSeen && !localStorage.getItem('eweome_welcome_seen')) go('welcome');
     else go('home');
