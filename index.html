@@ -15,6 +15,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 
   <style>
     /* ================================================================
@@ -467,6 +468,42 @@
 
 <script>
 /* ================================================================
+   PUSH NOTIFICATIONS
+================================================================ */
+async function requestNotificationPermission(uid) {
+  if (!messaging) return;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    if (token) {
+      await db.collection('users').doc(uid).update({ fcmToken: token, fcmUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      console.log('FCM token saved');
+    }
+  } catch(e) { console.log('Notification setup failed:', e.message); }
+}
+
+async function sendPushNotification(toUid, title, body) {
+  // We store the notification in Firestore - a Cloud Function would normally send it
+  // For now we use a notifications collection that can trigger FCM via Firebase Extensions
+  try {
+    await db.collection('notifications').add({
+      toUid, title, body,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      sent: false
+    });
+  } catch(e) { console.log('Could not queue notification:', e.message); }
+}
+
+// Listen for foreground messages
+if (messaging) {
+  messaging.onMessage(payload => {
+    const { title, body } = payload.notification || {};
+    if (title) showToast(title + (body ? ': ' + body : ''));
+  });
+}
+
+/* ================================================================
    TOAST & MODAL HELPERS
 ================================================================ */
 let _toastTimer;
@@ -519,6 +556,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
+const VAPID_KEY = 'BAd4zGsgemk1Yx5d0I4IP-g1LHw8nVW50a2LVRvrWVNEAhLNlL-d6VvnR9ww26Qd5-inISqsFctDDlXMJ3xm0UY';
+let messaging = null;
+try { messaging = firebase.messaging(); } catch(e) { console.log('Messaging not supported:', e.message); }
 
 /* ================================================================
    APP STATE
@@ -1458,11 +1498,13 @@ async function acceptCounter(id, counterAmount) {
 }
 
 async function rejectClaim(id) {
+  const rClaim = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===id);
   try {
     await db.collection('claims').doc(id).update({
       status:    'rejected',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (rClaim) sendPushNotification(rClaim.creditorUid, (A.userDoc?.displayName||'Someone') + ' rejected your claim', fmt(rClaim.amount) + (rClaim.description?' for '+rClaim.description:''));
     goNextPending();
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
@@ -2510,7 +2552,7 @@ function renderMergeAccounts() {
       ${sheepSvg(60)}
       <div style="text-align:center;">
         <div style="font-size:18px;font-weight:500;margin-bottom:8px;">We found an existing account</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:280px;">Your phone number is already linked to an existing ewe-o-me account${A.mergeName ? ' (' + esc(A.mergeName) + ')' : ''}. Sign into that account instead?</p>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:280px;">Your phone number matches an existing ewe-o-me account${A.mergeName ? ' (' + esc(A.mergeName) + ')' : ''}. Sign into that account instead?</p>
       </div>
       <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
         <button class="btn btn-green" style="padding:13px;" onclick="signIntoExistingAccount()">Yes, use my existing account</button>
@@ -2519,7 +2561,28 @@ function renderMergeAccounts() {
     </div>`;
 }
 
-async function signIntoExistingAccount() { await auth.signOut(); A.signinMode='choose'; A.mergeUid=null; go('signin'); }
+async function signIntoExistingAccount() {
+  const phoneUser = auth.currentUser;
+  try {
+    const existingUid = A.mergeUid;
+    if (phoneUser && phoneUser.phoneNumber && existingUid) {
+      const pn = phoneUser.phoneNumber.replace(/\s/g,'');
+      const existingDoc = await db.collection('users').doc(existingUid).get();
+      const existingName = existingDoc.exists ? existingDoc.data().displayName : '';
+      await db.collection('users_by_phone').doc(pn).set({ uid: existingUid, displayName: existingName });
+      await db.collection('users').doc(existingUid).update({ phone: pn });
+      await db.collection('users').doc(phoneUser.uid).delete().catch(()=>{});
+    }
+    A.mergeUid = null; A.mergeName = '';
+    await auth.signOut();
+    A.signinMode = 'choose';
+    showToast('Phone number linked! Please sign in with Google or email.');
+    go('signin');
+  } catch(e) {
+    showToast('Could not link accounts. Please sign in with Google instead.');
+    await auth.signOut(); go('signin');
+  }
+}
 async function keepNewAccount() { A.mergeUid=null; A.mergeName=''; await ensureUserDoc(A.user); subscribeToData(A.user.uid); go('home'); }
 
 /* ================================================================
@@ -2965,6 +3028,7 @@ auth.onAuthStateChanged(async fbUser => {
     }
     await ensureUserDoc(fbUser);
     subscribeToData(fbUser.uid);
+    requestNotificationPermission(fbUser.uid);
     if (A.needsOnboarding) go('onboarding');
     else if (!A.welcomeSeen && !localStorage.getItem('eweome_welcome_seen')) go('welcome');
     else go('home');
