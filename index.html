@@ -123,8 +123,8 @@
     }
     .nav-item.active { color: var(--green-600); }
     .nav-item svg { width: 25px; height: 25px; stroke: currentColor; fill: none; stroke-width: 2; }
-    .nav-item.pending-alert { color: #BA7517 !important; }
-    .nav-item.pending-alert svg { stroke: #BA7517 !important; }
+    .nav-item.pending-alert, .nav-item.pending-alert * { color: #BA7517 !important; }
+    .nav-item.pending-alert svg, .nav-item.pending-alert svg * { stroke: #BA7517 !important; fill: none !important; }
 
     /* ================================================================
        SCREEN HEADER
@@ -830,6 +830,7 @@ function render() {
     edit_note:       renderEditNote,
     welcome:         renderWelcome,
     name_prompt:     renderNamePrompt,
+    unregistered_claim: renderUnregisteredClaim,
     help:            renderHelp,
     merge_accounts: renderMergeAccounts,
     settings:   renderSettings,
@@ -1023,7 +1024,14 @@ function renderWho() {
       <div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:18px;">+</div>
       <div>
         <div style="font-size:15px;font-weight:500;color:var(--green-600);">New connection</div>
-        <div style="font-size:12px;color:var(--text-2);">Add someone by email</div>
+        <div style="font-size:12px;color:var(--text-2);">Add someone by email or phone</div>
+      </div>
+    </div>
+    <div class="list-item" onclick="go('unregistered_claim')">
+      <div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:18px;">&#128221;</div>
+      <div>
+        <div style="font-size:15px;font-weight:500;color:var(--text-1);">Log for someone not on ewe-o-me</div>
+        <div style="font-size:12px;color:var(--text-2);">Track it in your app — invite them later</div>
       </div>
     </div>`;
 }
@@ -1317,15 +1325,18 @@ async function sendClaim() {
       status:       io ? 'agreed' : 'pending',
       counterAmount:   null,
       counterComment:  null,
-      participants:    [credUid, debtUid],
+      participants:    A.claim.pendingPhone ? [credUid] : [credUid, debtUid],
+      pendingPhone:    A.claim.pendingPhone || null,
       nextDue: A.claim.recurring ? nextDueDate(A.claim.recurrence, A.claim.date) : null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     A._lastSentId = docRef ? docRef.id : null;
-    const notifTitle = io ? (A.userDoc?.displayName||'Someone') + ' has logged an I Owe You' : (A.userDoc?.displayName||'Someone') + ' has sent you a request';
-    const notifBody  = fmt(parseFloat(A.claim.amount)) + (A.claim.desc ? ' for ' + A.claim.desc : '');
-    sendPushNotification(debtUid, notifTitle, notifBody);
+    if (!A.claim.pendingPhone) {
+      const notifTitle = io ? (A.userDoc?.displayName||'Someone') + ' has logged an I Owe You' : (A.userDoc?.displayName||'Someone') + ' has sent you a request';
+      const notifBody  = fmt(parseFloat(A.claim.amount)) + (A.claim.desc ? ' for ' + A.claim.desc : '');
+      sendPushNotification(debtUid, notifTitle, notifBody);
+    }
     go(pfx() + '_sent');
   } catch (e) {
     if (e.message !== 'CANCELLED') {
@@ -1352,7 +1363,9 @@ function renderSent() {
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;width:100%;">
         <button class="btn btn-green" style="padding:13px;" onclick="go('home')">Back to home</button>
-        ${A._lastSentId ? `<button class="btn btn-ghost" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${A._lastSentId}')"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><line x1='8.59' y1='13.51' x2='15.42' y2='17.49'/><line x1='15.41' y1='6.51' x2='8.59' y2='10.49'/></svg> Share via WhatsApp / other</button>` : ''}
+        ${A._lastSentId ? `
+      ${A.claim.pendingPhone ? `<div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:12px 14px;border:0.5px solid var(--amber-100);margin-bottom:4px;"><div style="font-size:13px;color:var(--amber-800);line-height:1.6;">&#128221; Logged in your app. <strong>${esc(A.claim.personName)}</strong> isn't on ewe-o-me yet — share this with them so they can join!</div></div>` : ''}
+      <button class="btn ${A.claim.pendingPhone ? 'btn-green' : 'btn-ghost'}" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${A._lastSentId}')"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><line x1='8.59' y1='13.51' x2='15.42' y2='17.49'/><line x1='15.41' y1='6.51' x2='8.59' y2='10.49'/></svg> Share via WhatsApp / other</button>` : ''}
       </div>
     </div>`;
 }
@@ -2723,6 +2736,71 @@ function renderSearch() {
 /* ================================================================
    ONBOARDING
 ================================================================ */
+function renderUnregisteredClaim() {
+  const io = A.claim.type === 'ioowe';
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go(io?'io_who':'ew_who')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Log for unregistered person</span>
+    </div>
+    <div style="padding:20px 16px;display:flex;flex-direction:column;gap:14px;">
+      <p style="font-size:13px;color:var(--text-2);line-height:1.7;">This will be logged in your app only. If they later sign up with the same phone number, they'll automatically see this request.</p>
+      <div>
+        <label class="field-label">Their first name</label>
+        <input type="text" id="unreg-name" class="input" placeholder="e.g. Matt" autocomplete="off" aria-label="Name"/>
+      </div>
+      <div>
+        <label class="field-label">Their phone number</label>
+        <div style="display:flex;gap:8px;">
+          <input type="tel" id="unreg-phone" class="input" placeholder="07700 900000" inputmode="tel" style="flex:1;" aria-label="Phone number"/>
+          ${window.AndroidBridge ? `<button class="btn btn-ghost" style="width:auto;padding:10px 12px;font-size:13px;" onclick="pickUnregisteredContact()">Pick contact</button>` : ''}
+        </div>
+      </div>
+      <button class="btn btn-green" style="padding:13px;" onclick="saveUnregisteredClaim()">Continue &rarr;</button>
+    </div>`;
+}
+
+async function pickUnregisteredContact() {
+  if (window.AndroidBridge?.pickContact) {
+    const result = window.AndroidBridge.pickContact();
+    if (result) {
+      try {
+        const data = JSON.parse(result);
+        if (data.name) document.getElementById('unreg-name').value = data.name.split(' ')[0];
+        if (data.phone) document.getElementById('unreg-phone').value = data.phone;
+      } catch(e) {}
+    }
+  }
+}
+
+async function saveUnregisteredClaim() {
+  const name  = document.getElementById('unreg-name')?.value.trim();
+  const phone = document.getElementById('unreg-phone')?.value.trim();
+  if (!name) { showToast('Please enter their name.'); return; }
+  if (!phone) { showToast('Please enter their phone number.'); return; }
+  const normPhone = normalisePhone(phone);
+  // Check if they're already registered
+  try {
+    const existing = await db.collection('users_by_phone').doc(normPhone).get();
+    if (existing.exists) {
+      // They're registered! Use them as a normal claim
+      const uid = existing.data().uid;
+      const existingName = existing.data().displayName || name;
+      A.claim.personId   = uid;
+      A.claim.personName = existingName;
+      A.claim.pendingPhone = null;
+      showToast(name + ' is already on ewe-o-me!');
+      go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt');
+      return;
+    }
+    // Not registered — store as pending
+    A.claim.personId     = null;
+    A.claim.personName   = name;
+    A.claim.pendingPhone = normPhone;
+    go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt');
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
 function renderNamePrompt() {
   const existing = A.userDoc?.displayName || A.user?.displayName || '';
   const isEdit = existing && !/^[+\d\s]{7,}$/.test(existing.trim());
