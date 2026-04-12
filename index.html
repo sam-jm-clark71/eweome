@@ -1323,6 +1323,9 @@ async function sendClaim() {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     A._lastSentId = docRef ? docRef.id : null;
+    const notifTitle = io ? (A.userDoc?.displayName||'Someone') + ' has logged an I Owe You' : (A.userDoc?.displayName||'Someone') + ' has sent you a request';
+    const notifBody  = fmt(parseFloat(A.claim.amount)) + (A.claim.desc ? ' for ' + A.claim.desc : '');
+    sendPushNotification(debtUid, notifTitle, notifBody);
     go(pfx() + '_sent');
   } catch (e) {
     if (e.message !== 'CANCELLED') {
@@ -1545,22 +1548,26 @@ function goNextPending() {
 }
 
 async function acceptClaim(id) {
+  const cl = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===id);
   try {
     await db.collection('claims').doc(id).update({
       status:    'agreed',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (cl) sendPushNotification(cl.creditorUid, (A.userDoc?.displayName||'Someone') + ' accepted your request', fmt(cl.amount) + (cl.description?' for '+cl.description:''));
     goNextPending();
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function acceptCounter(id, counterAmount) {
+  const cl = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===id);
   try {
     await db.collection('claims').doc(id).update({
       status:    'agreed',
       amount:    parseFloat(counterAmount),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (cl) sendPushNotification(cl.creditorUid, (A.userDoc?.displayName||'Someone') + ' accepted your counter-offer', fmt(counterAmount) + (cl.description?' for '+cl.description:''));
     goNextPending();
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
