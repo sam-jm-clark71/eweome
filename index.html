@@ -471,6 +471,17 @@
    PUSH NOTIFICATIONS
 ================================================================ */
 // Called by Android APK after sign-in to save native FCM token
+// Also retry on page load in case user was already signed in
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const user = firebase.auth().currentUser;
+    if (user && window.AndroidBridge) {
+      try { window.AndroidBridge.saveFcmToken(user.uid); }
+      catch(e) {}
+    }
+  }, 2000);
+});
+
 window.saveNativeFcmToken = async function(uid, token) {
   if (!uid || !token) return;
   try {
@@ -583,6 +594,7 @@ const A = {
   _phoneVerifier: null,
   _confirmResult: null,
   needsOnboarding: false,
+  needsDisplayName: false,
   mergeUid:       null,
   mergeName:      '',
   _lastSentId:    null,
@@ -817,6 +829,7 @@ function render() {
     new_note:        renderNewNote,
     edit_note:       renderEditNote,
     welcome:         renderWelcome,
+    name_prompt:     renderNamePrompt,
     help:            renderHelp,
     merge_accounts: renderMergeAccounts,
     settings:   renderSettings,
@@ -1003,7 +1016,9 @@ function renderWho() {
   return `
     ${hdr(q, 'home', 1, 4)}
     ${isMulti && selected.length > 0 ? `<div style="padding:10px 16px;background:var(--green-50);display:flex;align-items:center;justify-content:space-between;border-bottom:0.5px solid var(--border);"><span style="font-size:13px;color:var(--green-600);font-weight:500;">${selected.length} selected: ${selected.map(r => esc(r.name)).join(', ')}</span><button class="btn btn-green" style="width:auto;padding:7px 14px;font-size:13px;" onclick="proceedMulti()">Continue &rarr;</button></div>` : ""}
-    ${connRows || `<div class="empty">No connections yet.<br>Add your first one below.</div>`}
+    ${connRows || `<div style="padding:16px 0 8px;text-align:center;">
+      <div style="font-size:13px;color:var(--text-2);line-height:1.7;">You haven't added anyone yet.<br>Add a connection below to start sending requests.</div>
+    </div>`}
     <div class="list-item" onclick="go('new_conn')">
       <div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:18px;">+</div>
       <div>
@@ -2212,25 +2227,49 @@ function renderSimplify() {
    SCREEN: FULL HISTORY
 ================================================================ */
 function renderPosHistory() {
-  const all = [...A.settled].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const uid = A.user?.uid;
+  const all = [...A.settled, ...A.ledger].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const totalOwed = A.ledger.filter(c=>c.creditorUid===uid).reduce((s,c)=>s+c.amount,0);
+  const totalOwe  = A.ledger.filter(c=>c.debtorUid===uid).reduce((s,c)=>s+c.amount,0);
+  const totalSettled = A.settled.length;
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="go('position')" aria-label="Back">&#8249;</button>
       <span class="screen-title">All history</span>
     </div>
-    ${all.length === 0 ? '<div class="empty">No settled transactions yet.</div>' : ''}
+    ${all.length === 0 ? `
+      <div style="padding:32px 24px;text-align:center;">
+        <div style="font-size:40px;margin-bottom:14px;">&#128203;</div>
+        <div style="font-size:17px;font-weight:500;margin-bottom:8px;">Nothing here yet</div>
+        <div style="font-size:13px;color:var(--text-2);line-height:1.7;">Once you send or receive requests, they'll appear here.</div>
+      </div>` : `
+    <div style="display:flex;gap:8px;padding:12px 16px 8px;">
+      <div style="flex:1;background:var(--green-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--green-100);">
+        <div style="font-size:11px;color:var(--green-600);margin-bottom:2px;">Outstanding owed to you</div>
+        <div style="font-size:16px;font-weight:500;color:var(--green-700);">${fmt(totalOwed)}</div>
+      </div>
+      <div style="flex:1;background:var(--red-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid rgba(162,45,45,0.15);">
+        <div style="font-size:11px;color:var(--red-600);margin-bottom:2px;">Outstanding you owe</div>
+        <div style="font-size:16px;font-weight:500;color:var(--red-600);">${fmt(totalOwe)}</div>
+      </div>
+    </div>
+    <div style="padding:6px 16px 10px;font-size:12px;color:var(--text-2);">${totalSettled} settled · ${all.length - totalSettled} outstanding</div>
     ${all.map(e => {
-      const iCr = e.creditorUid === A.user.uid;
+      const iCr = e.creditorUid === uid;
       const other = iCr ? e.debtorName : e.creditorName;
-      return '<div style="padding:13px 16px;border-bottom:0.5px solid var(--border);">'
-        + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px;">'
-        + '<span style="font-size:14px;font-weight:500;flex:1;min-width:0;">' + (esc(e.description)||'No description') + '</span>'
-        + '<span style="font-size:15px;font-weight:500;flex-shrink:0;color:' + (iCr?'var(--green-600)':'var(--red-600)') + ';">'
-        + (iCr?'+':'-') + fmt(e.amount) + '</span></div>'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;">'
-        + '<span style="font-size:12px;color:var(--text-2);">' + esc(other) + ' &middot; ' + fmtDate(e.date) + '</span>'
-        + '<span class="tag tag-green">Settled</span></div></div>';
-    }).join('')}`;
+      const settled = e.status === 'settled';
+      return '<div class="list-item" onclick="A.selectedClaimId=\'' + e.id + '\';go(\'req_detail\')" style="padding:12px 16px;">'
+        + '<div class="avatar ' + (iCr?'':'red') + '" style="font-size:13px;">' + initials(other) + '</div>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:14px;font-weight:500;">' + (esc(e.description)||'No description') + '</div>'
+        + '<div style="font-size:12px;color:var(--text-2);margin-top:2px;">' + esc(other) + ' &middot; ' + fmtDate(e.date) + '</div>'
+        + '</div>'
+        + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">'
+        + '<span style="font-size:14px;font-weight:500;color:' + (iCr?'var(--green-600)':'var(--red-600)') + ';">' + (iCr?'+':'-') + fmt(e.amount) + '</span>'
+        + '<span class="tag ' + (settled?'tag-green':'tag-amber') + '">' + (settled?'Settled':'Outstanding') + '</span>'
+        + '</div></div>';
+    }).join('')}`}
+  `;
 }
 
 /* ================================================================
@@ -2396,7 +2435,7 @@ function renderHelp() {
     },
     {
       title: 'Sharing claims via WhatsApp, text or email',
-      body: `You don't have to wait for the other person to open the app — you can share any claim directly from within ewe-o-me. After sending a claim, you'll see a share button on the confirmation screen. You can also share from the claim detail screen at any point. Tapping share opens your usual sharing options — WhatsApp, iMessage, email, whatever you prefer — with a pre-written message that includes the key details. This is especially useful if the other person hasn't signed up to ewe-o-me yet: the message includes a link to the app so they can join and see the full record.`
+      body: `You don't have to wait for the other person to open the app — you can share any claim directly from within ewe-o-me via WhatsApp, iMessage, email, or whatever you prefer. After sending a claim, tap the share button on the confirmation screen. If the person you're sharing with isn't on ewe-o-me yet, the message will include a friendly intro explaining what the app is and inviting them to join. If they're already a connection, you'll get a shorter, snappier message with just the key details.`
     },
     {
       title: 'Responding to an incoming claim',
@@ -2411,8 +2450,8 @@ function renderHelp() {
       body: `Once money has actually changed hands — however that happens, bank transfer, cash, whatever — you can mark things as settled in My Position. Tap the person's name, then tap "Mark as settled" on individual items, or use the "Settle all" button to clear everything at once. If the other person marks something settled first, you'll be asked to confirm that you've received it.`
     },
     {
-      title: 'Querying a claim and requesting evidence',
-      body: `If someone sends you a claim and you're not sure about the amount — or you just want to see proof before agreeing — you can query it. Tapping "Query the amount" gives you two options: propose a different amount as a counter-offer, or request evidence. If you request evidence, the other person gets a notification and can upload a photo or receipt directly in the app. Once they've uploaded it, you can view it and then decide whether to accept or still query the amount.`
+      title: 'Querying a claim or asking a question',
+      body: `If something\'s not quite right about a claim you\'ve received, tap "Query / ask a question". You\'ll get two options:\n\n• Propose a different amount — if you agree the debt exists but the amount is wrong. The other person will see your counter-offer and can accept or reject it.\n\n• Ask a question — if you want to check something before deciding, like whether the total included your share of the bill. They\'ll get a notification, can type a reply, and once you\'ve read it you can accept, counter, or reject the claim.`
     },
     {
       title: 'Notes',
@@ -2677,6 +2716,42 @@ function renderSearch() {
 /* ================================================================
    ONBOARDING
 ================================================================ */
+function renderNamePrompt() {
+  const existing = A.userDoc?.displayName || A.user?.displayName || '';
+  const isEdit = existing && !/^[+\d\s]{7,}$/.test(existing.trim());
+  return `
+    <div class="signin-screen" style="padding:40px 24px;">
+      ${isEdit ? '<button class="back-btn" style="position:absolute;top:16px;left:16px;" onclick="go(\'settings\')">&#8249;</button>' : ''}
+      ${sheepSvg(60)}
+      <div style="text-align:center;">
+        <div style="font-size:18px;font-weight:500;margin-bottom:8px;">${isEdit ? 'Edit your name' : 'What\'s your name?'}</div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:280px;">This is how you'll appear to the people you send requests to.</p>
+      </div>
+      <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
+        <input type="text" id="name-input" class="input" placeholder="e.g. Sam" autocomplete="name" value="${isEdit ? esc(existing) : ''}" aria-label="Your name"/>
+        <button class="btn btn-green" style="padding:13px;" onclick="saveDisplayName()">Save</button>
+      </div>
+    </div>`;
+}
+
+async function saveDisplayName() {
+  const name = document.getElementById('name-input')?.value.trim();
+  if (!name) { showToast('Please enter your name.'); return; }
+  try {
+    await db.collection('users').doc(A.user.uid).update({ displayName: name });
+    if (A.userDoc?.phone) {
+      await db.collection('users_by_phone').doc(A.userDoc.phone).set({ uid: A.user.uid, displayName: name }, { merge: true });
+    }
+    if (A.user?.email) {
+      await db.collection('users_by_email').doc(A.user.email).set({ uid: A.user.uid, displayName: name }, { merge: true });
+    }
+    A.needsDisplayName = false;
+    if (A.userDoc) A.userDoc.displayName = name;
+    const wasEditing = A.screen === 'name_prompt' && !A.needsOnboarding;
+    go(A.needsOnboarding ? 'onboarding' : wasEditing ? 'settings' : 'home');
+  } catch(e) { showToast('Could not save name. Please try again.'); }
+}
+
 function renderOnboarding() {
   return `
     <div class="signin-screen" style="padding:40px 24px;">
@@ -2757,17 +2832,45 @@ function inviteContact(name) {
   if (navigator.share) navigator.share({text}).catch(()=>{}); else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
 }
 
-function buildShareText(claim) {
-  const io = claim.type==='ioowe', dir=io?'I owe you':'You owe me';
-  const desc=claim.description?' for '+claim.description:'', date=claim.date?' ('+fmtDate(claim.date)+')':'';
-  const onAcct=claim.onAccount?' No rush.':'';
-  return dir+' '+fmt(claim.amount)+desc+date+'.'+onAcct+'\n\newe-o-me: https://eweome-41e0f.web.app';
+function buildShareText(claim, isNewContact) {
+  const myName = A.userDoc?.displayName || A.user?.displayName || 'Someone';
+  const io = claim.type === 'ioowe';
+  const amount = fmt(claim.amount);
+  const desc = claim.description || '';
+  const date = claim.date ? fmtDate(claim.date) : '';
+  const onAcct = claim.onAccount ? ' There\'s no rush to pay.' : '';
+  const appUrl = 'https://eweome-41e0f.web.app';
+
+  if (isNewContact) {
+    // Wordy intro version for people who may not have the app
+    const direction = io
+      ? `I wanted to let you know that I owe you ${amount}${desc ? ' for ' + desc : ''}${date ? ' (' + date + ')' : ''}.`
+      : `I wanted to remind you that you owe me ${amount}${desc ? ' for ' + desc : ''}${date ? ' (' + date + ')' : ''}.`;
+    return `Hi! ${direction}${onAcct}
+
+`
+      + `I'm using an app called ewe-o-me to keep track of money between friends and family — it makes it easy to log debts, agree amounts, and mark things as settled when they're paid. No payments go through the app, it's just a shared record.
+
+`
+      + `It would be great if you joined too so we can keep track of this together: ${appUrl}`;
+  } else {
+    // Short version for existing contacts
+    const direction = io
+      ? `Just a heads up — I've logged that I owe you ${amount}${desc ? ' for ' + desc : ''}${date ? ' (' + date + ')' : ''}.`
+      : `Reminder — you owe me ${amount}${desc ? ' for ' + desc : ''}${date ? ' (' + date + ')' : ''}.`;
+    return `${direction}${onAcct}
+
+(Sent via ewe-o-me — ${appUrl})`;
+  }
 }
 
 function shareViaSystem(claimId) {
   const all=[...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
   const claim=all.find(c=>c.id===claimId); if(!claim) return;
-  const text=buildShareText(claim);
+  // Check if recipient is an existing connection
+  const recipientUid = claim.type==='ioowe' ? claim.creditorUid : claim.debtorUid;
+  const isNew = !(A.connections||[]).some(c => c.id === recipientUid);
+  const text=buildShareText(claim, isNew);
   if(navigator.share) navigator.share({text}).catch(()=>{}); else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
 }
 
@@ -2825,8 +2928,13 @@ function renderSettings() {
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">Signed in as</div>
-      <div style="font-size:15px;font-weight:500;">${esc(A.userDoc?.displayName || A.user?.displayName || '')}</div>
-      ${A.user?.email ? `<div style="font-size:13px;color:var(--text-2);">${esc(A.user.email)}</div>` : ''}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div>
+          <div style="font-size:15px;font-weight:500;">${esc(A.userDoc?.displayName || A.user?.displayName || '')}</div>
+          ${A.user?.email ? `<div style="font-size:13px;color:var(--text-2);">${esc(A.user.email)}</div>` : ''}
+        </div>
+        <button onclick="go('name_prompt')" style="background:none;border:none;font-size:12px;color:var(--green-600);cursor:pointer;padding:4px;">Edit name</button>
+      </div>
       ${A.userDoc?.phone || A.user?.phoneNumber ? `<div style="font-size:13px;color:var(--text-2);">${esc(A.userDoc?.phone || A.user?.phoneNumber)}</div>` : ''}
       ${!A.userDoc?.phone && !A.user?.phoneNumber ? `<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;margin-top:6px;width:auto;" onclick="go('onboarding')">Add phone number</button>` : ''}
     </div>
@@ -3082,6 +3190,10 @@ async function ensureUserDoc(fbUser) {
     }
     if (!fbUser.phoneNumber) A.needsOnboarding = true;
   }
+  // Check if display name is missing or is just a phone number
+  const name = A.userDoc?.displayName || fbUser.displayName || '';
+  const looksLikePhone = /^[+\d\s]{7,}$/.test(name.trim());
+  A.needsDisplayName = !name || looksLikePhone;
 }
 
 /* ================================================================
@@ -3195,8 +3307,12 @@ auth.onAuthStateChanged(async fbUser => {
     await ensureUserDoc(fbUser);
     subscribeToData(fbUser.uid);
     requestNotificationPermission(fbUser.uid);
-    if (window.AndroidBridge) window.AndroidBridge.saveFcmToken(fbUser.uid);
-    if (A.needsOnboarding) go('onboarding');
+    if (window.AndroidBridge) {
+      try { window.AndroidBridge.saveFcmToken(fbUser.uid); }
+      catch(e) { console.log('FCM bridge call failed:', e); }
+    }
+    if (A.needsDisplayName) go('name_prompt');
+    else if (A.needsOnboarding) go('onboarding');
     else if (!A.welcomeSeen && !localStorage.getItem('eweome_welcome_seen')) go('welcome');
     else go('home');
     // Will redirect to pending after data loads if needed
