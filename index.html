@@ -226,10 +226,11 @@
       -webkit-tap-highlight-color: transparent;
     }
     .btn:active { opacity: 0.75; transform: scale(0.98); }
-    .btn-green  { background: var(--green-100);  color: var(--green-800); }
-    .btn-amber  { background: var(--amber-100);  color: var(--amber-600); }
-    .btn-red    { background: var(--red-50);      color: var(--red-600); border: 0.5px solid rgba(162,45,45,0.2); }
-    .btn-ghost  { background: var(--surface);    color: var(--text-1); border: 0.5px solid var(--border); }
+    .btn-green  { background: #3B6D11; color: #ffffff; }
+    .btn-amber  { background: #9A6500; color: #ffffff; }
+    .btn-red    { background: #A32D2D; color: #ffffff; border: none; }
+    .btn-ghost  { background: transparent; color: var(--green-600); border: 1.5px solid var(--green-600); }
+    .btn-grey   { background: transparent; color: var(--text-2); border: 1.5px solid var(--border); }
 
     /* ================================================================
        LIST ITEMS
@@ -1257,20 +1258,20 @@ async function sendClaim() {
   if (A.claim.type === 'eweome' && A.claim.recipients && A.claim.recipients.length > 1) {
     await sendMultiClaim(); return;
   }
-  const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const weekStr = oneWeekAgo.toISOString().split('T')[0];
+  const claimDateMs = new Date(A.claim.date).getTime();
+  const threeDays = 3 * 24 * 60 * 60 * 1000;
   const allClaims = [...A.pendingClaims, ...A.sentClaims, ...A.ledger, ...A.settled];
   const dup = allClaims.find(c =>
     c.creditorUid === A.user.uid &&
     c.debtorUid === A.claim.personId &&
     parseFloat(c.amount) === parseFloat(A.claim.amount) &&
-    (c.date || '') >= weekStr
+    Math.abs(new Date(c.date||'').getTime() - claimDateMs) <= threeDays
   );
   if (dup) {
     await new Promise(resolve => {
       showModal(
         'Heads up — you already sent ' + esc(A.claim.personName) + ' a claim for ' + fmt(A.claim.amount) +
-        ' on ' + fmtDate(dup.date) + '. Is this a duplicate?',
+        ' on ' + fmtDate(dup.date) + '. The amounts match — is this a duplicate?',
         [
           { label: 'Send anyway', style: 'btn-green', action: () => resolve(true) },
           { label: 'Go back', style: 'btn-ghost', action: () => resolve(false) }
@@ -1385,22 +1386,59 @@ function renderReqDetail() {
       </div>
     </div>
 
+    ${claim.status === 'queried' && claim.answeredQuestion && iAmDebtor ? `
+      <div style="padding:0 16px 8px;display:flex;flex-direction:column;gap:10px;">
+        <div style="background:var(--surface);border-radius:var(--radius-sm);padding:14px;border:0.5px solid var(--border);">
+          <div style="font-size:12px;font-weight:500;color:var(--amber-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Your question</div>
+          <div style="font-size:13px;color:var(--text-2);line-height:1.6;">&ldquo;${esc(claim.question)}&rdquo;</div>
+        </div>
+        <div style="background:var(--green-50);border-radius:var(--radius-sm);padding:14px;border:0.5px solid var(--green-100);">
+          <div style="font-size:12px;font-weight:500;color:var(--green-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">${esc(claim.creditorName)}'s reply</div>
+          <div style="font-size:14px;color:var(--text-1);line-height:1.6;">&ldquo;${esc(claim.answeredQuestion)}&rdquo;</div>
+        </div>
+        <div style="font-size:13px;color:var(--text-2);text-align:center;padding:4px 0;">What would you like to do?</div>
+        <button class="btn btn-green" style="padding:13px;" onclick="acceptClaim('${claim.id}')">Accept — pay the full ${fmt(claim.amount)}</button>
+        <button class="btn btn-amber" style="padding:11px;font-size:13px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='amount';go('q_form')">Propose a different amount</button>
+        <button class="btn btn-grey"  style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject this claim</button>
+      </div>` : ''}
+
     ${isIncoming ? `
       <div style="padding:0 16px;display:flex;flex-direction:column;gap:9px;">
-        <button class="btn btn-green" style="padding:13px;" onclick="acceptClaim('${claim.id}')">Yes, that's right &#10003;</button>
-        <button class="btn btn-amber" style="padding:13px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='choose';go('q_form')">Query / request evidence</button>
+        <button class="btn btn-green" style="padding:13px;" onclick="acceptClaim('${claim.id}')">Accept — yes, that's right &#10003;</button>
+        <button class="btn btn-amber" style="padding:13px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='choose';go('q_form')">Query / ask a question</button>
         <button class="btn btn-red"   style="padding:13px;" onclick="startReject('${claim.id}')">Reject this claim</button>
         <button class="btn btn-ghost" style="padding:10px;font-size:13px;" onclick="skipClaim('${claim.id}')">Skip for now &rarr;</button>
       </div>` : ''}
 
     ${counterPendingOnMe ? `
-      <div style="padding:0 16px;display:flex;flex-direction:column;gap:9px;">
-        <div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:12px 14px;border:0.5px solid var(--amber-100);margin-bottom:4px;">
-          <div style="font-size:13px;color:var(--amber-800);margin-bottom:6px;">You claimed <strong>${fmt(claim.amount)}</strong> — ${esc(claim.debtorName)} has proposed <strong>${fmt(claim.counterAmount)}</strong> instead.</div>
-          ${claim.counterComment ? `<div style="font-size:12px;color:var(--amber-700);border-top:0.5px solid var(--amber-100);padding-top:6px;margin-top:4px;">Their note: <em>${esc(claim.counterComment)}</em></div>` : ''}
+      <div style="padding:0 16px 8px;display:flex;flex-direction:column;gap:10px;">
+
+        <div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:14px;border:0.5px solid var(--amber-100);">
+          <div style="font-size:12px;font-weight:500;color:var(--amber-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Your request</div>
+          <div style="font-size:14px;color:var(--text-1);margin-bottom:2px;">You asked ${esc(claim.debtorName)} for <strong>${fmt(claim.amount)}</strong></div>
+          ${claim.description ? '<div style="font-size:13px;color:var(--text-2);">For: ' + esc(claim.description) + '</div>' : ''}
         </div>
-        <button class="btn btn-green" style="padding:13px;" onclick="acceptCounter('${claim.id}',${claim.counterAmount})">Accept ${fmt(claim.counterAmount)}</button>
-        <button class="btn btn-red"   style="padding:13px;" onclick="rejectClaim('${claim.id}')">Reject counter-offer</button>
+
+        <div style="background:var(--surface);border-radius:var(--radius-sm);padding:14px;border:0.5px solid var(--border);">
+          ${claim.question && !claim.counterAmount ? `
+            <div style="font-size:12px;font-weight:500;color:var(--amber-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Their question</div>
+            <div style="font-size:14px;color:var(--text-1);line-height:1.6;">&ldquo;${esc(claim.question)}&rdquo;</div>` :
+          `
+            <div style="font-size:12px;font-weight:500;color:var(--amber-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Their counter-offer</div>
+            <div style="font-size:14px;color:var(--text-1);">They're proposing <strong>${fmt(claim.counterAmount)}</strong> instead</div>
+            ${claim.counterComment ? '<div style="font-size:13px;color:var(--text-2);margin-top:4px;">Note: <em>' + esc(claim.counterComment) + '</em></div>' : ''}`}
+        </div>
+
+        ${claim.question && !claim.counterAmount ? `
+          <div id="answer-wrap" style="display:flex;flex-direction:column;gap:8px;">
+            <textarea id="q-answer" class="input" rows="3" placeholder="Type your reply here…" style="resize:none;"></textarea>
+            <button class="btn btn-green" style="padding:12px;" onclick="answerQuestion('${claim.id}')">Send reply</button>
+            <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="acceptClaim('${claim.id}')">Accept the original amount anyway</button>
+            <button class="btn btn-grey" style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject the claim</button>
+          </div>` : `
+          <button class="btn btn-green" style="padding:13px;" onclick="acceptCounter('${claim.id}',${claim.counterAmount})">Accept ${fmt(claim.counterAmount)}</button>
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="acceptClaim('${claim.id}')">Accept original ${fmt(claim.amount)} instead</button>
+          <button class="btn btn-grey"  style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject this claim</button>`}
       </div>` : ''}
 
     ${claim.status === 'pending' && iAmCreditor ? `
@@ -1634,7 +1672,7 @@ function renderQueryForm() {
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="${mode==='choose'?'go(\'req_detail\')':'A.queryMode=\'choose\';render()'}" aria-label="Back">&#8249;</button>
-      <span class="screen-title">${mode==='choose'?'Query this claim':mode==='amount'?'Counter-offer':'Request evidence'}</span>
+      <span class="screen-title">${mode==='choose'?'Query this claim':mode==='amount'?'Counter-offer':'Ask a question'}</span>
     </div>
     <div style="padding:20px 16px;">
 
@@ -1645,9 +1683,9 @@ function renderQueryForm() {
             <div style="font-weight:500;margin-bottom:3px;">Propose a different amount</div>
             <div style="font-size:12px;opacity:0.8;">The debt exists but the amount is wrong</div>
           </button>
-          <button class="btn btn-ghost" style="padding:14px;text-align:left;" onclick="A.queryMode='evidence';render()">
-            <div style="font-weight:500;margin-bottom:3px;">Request evidence</div>
-            <div style="font-size:12px;color:var(--text-2);">Ask ${esc(creditorName)} to upload a receipt or photo</div>
+          <button class="btn btn-ghost" style="padding:14px;text-align:left;" onclick="A.queryMode='question';render()">
+            <div style="font-weight:500;margin-bottom:3px;">Ask a question</div>
+            <div style="font-size:12px;color:var(--text-2);">Send a message back to ${esc(creditorName)} before deciding</div>
           </button>
         </div>` : ''}
 
@@ -1659,13 +1697,31 @@ function renderQueryForm() {
         <textarea id="q-note" class="input" style="height:68px;" placeholder="e.g. I only had the starter, not the main…" oninput="A.queryNote=this.value" aria-label="Comment">${A.queryNote||''}</textarea>
         <button class="btn btn-amber" style="padding:13px;margin-top:16px;" onclick="sendQuery()">Send counter-offer</button>` : ''}
 
-      ${mode === 'evidence' ? `
-        <p style="font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6;">Send a request to ${esc(creditorName)} asking them to upload a receipt or photo as proof of this claim.</p>
-        <label class="field-label">Message to ${esc(creditorName)} <span style="color:var(--text-3);">(optional)</span></label>
-        <textarea id="q-ev-note" class="input" rows="3" placeholder="e.g. Could you send a photo of the receipt?" style="resize:none;"></textarea>
-        <button class="btn btn-ghost" style="padding:13px;margin-top:16px;" onclick="requestEvidence()">Send evidence request</button>` : ''}
+      ${mode === 'question' ? `
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:18px;line-height:1.6;">Send a message to ${esc(creditorName)} before you decide. They'll see it and can respond.</p>
+        <label class="field-label">Your message</label>
+        <textarea id="q-question" class="input" rows="4" placeholder="e.g. Can you confirm the total for the meal was £60? I didn't have a cocktail." style="resize:none;margin-bottom:16px;"></textarea>
+        <button class="btn btn-amber" style="padding:13px;" onclick="sendQuestion()">Send question</button>` : ''}
 
     </div>`;
+}
+
+async function sendQuestion() {
+  const q = document.getElementById('q-question')?.value?.trim();
+  if (!q) { showToast('Please type a message first.'); return; }
+  const claim = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===A.selectedClaimId);
+  try {
+    await db.collection('claims').doc(A.selectedClaimId).update({
+      status: 'queried',
+      question: q,
+      counterAmount: null,
+      counterComment: null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    if (claim) sendPushNotification(claim.creditorUid, (A.userDoc?.displayName||'Someone') + ' has a question about your claim', q.length > 60 ? q.slice(0,57)+'...' : q);
+    A.queryMode = 'choose';
+    go('q_sent');
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function sendQuery() {
@@ -1828,13 +1884,15 @@ function renderQuerySent() {
         <circle cx="30" cy="30" r="28" fill="#FAEEDA" stroke="#FAC775" stroke-width="1.5"/>
         <text x="30" y="39" text-anchor="middle" font-size="26" fill="#633806">?</text>
       </svg>
-      <div style="font-size:20px;font-weight:500;">Counter-offer sent</div>
+      <div style="font-size:20px;font-weight:500;">${A.queryMode === 'question' ? 'Question sent' : 'Counter-offer sent'}</div>
       <div style="font-size:14px;color:var(--text-2);line-height:1.8;">
-        You've proposed <strong>${fmt(A.queryAmount)}</strong> instead of the original amount.<br>
-        ${A.queryNote ? '<em>&ldquo;' + esc(A.queryNote) + '&rdquo;</em><br>' : ''}
-        The other person will be notified and can accept or reject your counter.
+        ${A.queryMode === 'question'
+          ? 'Your message has been sent. The claim stays open while you wait for a response.'
+          : 'You\'ve proposed <strong>' + fmt(A.queryAmount) + '</strong> instead of the original amount.<br>' +
+            (A.queryNote ? '<em>&ldquo;' + esc(A.queryNote) + '&rdquo;</em><br>' : '') +
+            'The other person will be notified and can accept or reject your counter.'}
       </div>
-      <button class="btn btn-green" style="margin-top:16px;padding:13px;" onclick="go('home')">Back to home</button>
+      <button class="btn btn-grey" style="margin-top:16px;padding:13px;" onclick="go('home')">Back to home</button>
     </div>`;
 }
 
@@ -2193,19 +2251,33 @@ function renderPending() {
       ${incoming.map(c => {
         const isReject = c.status === 'rejected';
         const isSettle = c.status === 'settlement_pending';
-        const label = isReject
-          ? esc(c.debtorName) + ' rejected your claim'
-          : isSettle
-            ? esc(c.debtorName) + ' says they paid you'
-            : esc(c.creditorName) + (
-            c.status === 'evidence_requested' ? ' has requested evidence' :
-            ' claims you owe them'
-          );
+        const iAmCr = c.creditorUid === A.user?.uid;
+        const other = iAmCr ? c.debtorName : c.creditorName;
+        let label, sublabel;
+        if (isReject) {
+          label = esc(c.debtorName) + ' rejected your claim';
+          sublabel = 'Tap to see their reason';
+        } else if (isSettle) {
+          label = esc(c.debtorName) + ' says they\'ve paid you';
+          sublabel = 'Tap to confirm you received it';
+        } else if (c.status === 'queried' && c.question && !c.counterAmount && iAmCr) {
+          label = esc(c.debtorName) + ' has asked you a question';
+          sublabel = 'Tap to read it and respond';
+        } else if (c.status === 'queried' && c.counterAmount && iAmCr) {
+          label = esc(c.debtorName) + ' has queried the amount';
+          sublabel = 'Tap to see their counter-offer';
+        } else if (c.status === 'queried' && c.answeredQuestion && !iAmCr) {
+          label = esc(c.creditorName) + ' has answered your question';
+          sublabel = 'Tap to read their reply and decide';
+        } else {
+          label = esc(c.creditorName) + ' has sent you a request';
+          sublabel = 'Tap to accept, query or reject';
+        }
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
-          + '<div class="avatar ' + (isReject ? '' : 'amber') + '">' + initials(isReject || isSettle ? c.debtorName : c.creditorName) + '</div>'
+          + '<div class="avatar ' + (isReject ? '' : 'amber') + '">' + initials(other) + '</div>'
           + '<div style="flex:1;min-width:0;">'
           + '<div style="font-size:14px;font-weight:500;">' + label + '</div>'
-          + '<div style="font-size:12px;color:var(--text-2);">' + fmt(c.amount) + (c.description ? ' · ' + esc(c.description) : '') + '</div>'
+          + '<div style="font-size:12px;color:var(--text-2);margin-top:2px;">' + sublabel + '</div>'
           + '</div>'
           + '<div style="color:var(--text-3);font-size:20px;">&#8250;</div></div>';
       }).join('')}
@@ -2215,11 +2287,21 @@ function renderPending() {
         <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Waiting for response</div>
       </div>
       ${outgoing.map(c => {
+        const outLabel = c.status === 'queried' && c.question && !c.counterAmount
+          ? 'Your question has been answered by ' + esc(c.debtorName)
+          : c.status === 'queried' && c.counterAmount
+          ? esc(c.debtorName) + ' has proposed a different amount'
+          : 'Waiting for ' + esc(c.debtorName) + ' to respond';
+        const outSub = c.status === 'queried' && c.answeredQuestion
+          ? 'Tap to read their reply'
+          : c.status === 'queried'
+          ? 'Tap to see their counter-offer'
+          : 'Tap to view or cancel';
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
           + '<div class="avatar">' + initials(c.debtorName) + '</div>'
           + '<div style="flex:1;min-width:0;">'
-          + '<div style="font-size:14px;font-weight:500;">You claimed ' + fmt(c.amount) + ' from ' + esc(c.debtorName) + '</div>'
-          + '<div style="font-size:12px;color:var(--text-2);">' + (c.description ? esc(c.description) + ' · ' : '') + fmtDate(c.date) + '</div>'
+          + '<div style="font-size:14px;font-weight:500;">' + outLabel + '</div>'
+          + '<div style="font-size:12px;color:var(--text-2);margin-top:2px;">' + outSub + '</div>'
           + '</div>'
           + '<span class="tag tag-amber" style="flex-shrink:0;">Waiting</span></div>';
       }).join('')}
@@ -3068,6 +3150,7 @@ function subscribeToData(uid) {
       A.pendingClaims = all.filter(c =>
         (c.status === 'pending'             && c.debtorUid   === uid) ||
         (c.status === 'queried'             && c.creditorUid === uid) ||
+        (c.status === 'queried'             && c.debtorUid   === uid && c.answeredQuestion) ||
         (c.status === 'evidence_requested'  && c.creditorUid === uid) ||
         (c.status === 'evidence_requested'  && c.debtorUid   === uid && c.evidenceUrl) ||
         (c.status === 'settlement_pending'  && c.creditorUid === uid) ||
