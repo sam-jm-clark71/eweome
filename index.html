@@ -1747,6 +1747,25 @@ function renderQueryForm() {
     </div>`;
 }
 
+async function answerQuestion(claimId) {
+  const answer = document.getElementById('q-answer')?.value?.trim();
+  if (!answer) { showToast('Please type a reply first.'); return; }
+  const claim = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===claimId);
+  try {
+    await db.collection('claims').doc(claimId).update({
+      answeredQuestion: answer,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    if (claim) sendPushNotification(
+      claim.debtorUid,
+      (A.userDoc?.displayName||'Someone') + ' answered your question',
+      answer.length > 60 ? answer.slice(0,57)+'...' : answer
+    );
+    showToast('Reply sent!');
+    go('home');
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
 async function sendQuestion() {
   const q = document.getElementById('q-question')?.value?.trim();
   if (!q) { showToast('Please type a message first.'); return; }
@@ -3064,7 +3083,7 @@ function renderSettings() {
 ================================================================ */
 function renderNewConn() {
   const back = A.claim.type ? pfx()+'_who' : 'settings';
-    const hasContactPicker = 'contacts' in navigator && 'ContactsManager' in window;
+    const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window) || window.AndroidBridge?.pickContact;
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="go('${back}')" aria-label="Back">&#8249;</button>
@@ -3094,7 +3113,31 @@ function renderNewConn() {
       <button class="btn btn-green" style="padding:13px;" onclick="addConnection()">Add and continue</button>
     </div>`;}
 
+// Called by Android after contact picker returns a result
+window.pickFromContactsResult = function(json) {
+  try {
+    const data = JSON.parse(json);
+    const el = document.getElementById('nc-name');
+    const el2 = document.getElementById('nc-email');
+    if (el && data.name) el.value = data.name;
+    if (el2 && (data.phone || data.email)) el2.value = data.phone || data.email;
+  } catch(e) { console.log('Contact result error:', e); }
+};
+
 async function pickFromContacts() {
+  // Use native Android bridge if available (APK)
+  if (window.AndroidBridge?.pickContact) {
+    try {
+      const result = window.AndroidBridge.pickContact();
+      if (result) {
+        const data = JSON.parse(result);
+        const el = document.getElementById('nc-name'); if(el && data.name) el.value = data.name;
+        const el2 = document.getElementById('nc-email'); if(el2 && (data.phone||data.email)) el2.value = data.phone || data.email;
+      }
+    } catch(e) { console.log('Android contact picker error:', e); }
+    return;
+  }
+  // Web Contact API fallback (Chrome browser)
   try {
     const contacts = await navigator.contacts.select(['name','tel','email'],{multiple:true});
     if(!contacts||contacts.length===0) return;
@@ -3350,7 +3393,7 @@ function subscribeToData(uid) {
       }
 
       // Incoming & needs my action (including rejected claims the creditor hasn't dismissed)
-      A.pendingClaims = all.filter(c =>
+      A.pendingClaims = all.filter(c => c.status !== 'cancelled' && (
         (c.status === 'pending'             && c.debtorUid   === uid) ||
         (c.status === 'queried'             && c.creditorUid === uid) ||
         (c.status === 'queried'             && c.debtorUid   === uid && c.answeredQuestion) ||
@@ -3358,13 +3401,15 @@ function subscribeToData(uid) {
         (c.status === 'evidence_requested'  && c.debtorUid   === uid && c.evidenceUrl) ||
         (c.status === 'settlement_pending'  && c.creditorUid === uid) ||
         (c.status === 'rejected'            && c.creditorUid === uid && !c.creditorDismissed)
-      );
+      ));
 
       // Outgoing awaiting response
       A.sentClaims = all.filter(c =>
-        ((c.status === 'pending'  && c.creditorUid === uid) ||
-        (c.status === 'queried'  && c.debtorUid   === uid)) &&
-        c.status !== 'cancelled'
+        c.status !== 'cancelled' && (
+        (c.status === 'pending'           && c.creditorUid === uid) ||
+        (c.status === 'queried'           && c.debtorUid   === uid && !c.answeredQuestion) ||
+        (c.status === 'settlement_pending' && c.debtorUid  === uid)
+        )
       );
 
       // Outstanding agreed debts
