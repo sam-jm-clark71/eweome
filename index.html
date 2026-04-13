@@ -1985,12 +1985,14 @@ function renderPosition() {
   A.ledger.forEach(claim => {
     if (claim.creditorUid === A.user.uid) {
       const id = claim.debtorUid;
-      if (!bals[id]) bals[id] = { name: claim.debtorName, bal: 0 };
+      if (!bals[id]) bals[id] = { name: claim.debtorName, bal: 0, hasPendingSettlement: false };
       bals[id].bal += claim.amount;
+      if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
     } else if (claim.debtorUid === A.user.uid) {
       const id = claim.creditorUid;
-      if (!bals[id]) bals[id] = { name: claim.creditorName, bal: 0 };
+      if (!bals[id]) bals[id] = { name: claim.creditorName, bal: 0, hasPendingSettlement: false };
       bals[id].bal -= claim.amount;
+      if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
     }
   });
   A.connections.forEach(c => { if (bals[c.id]) bals[c.id].color = c.color; });
@@ -2025,7 +2027,7 @@ function renderPosition() {
             <div class="avatar ${i.color || ''}">${initials(i.name)}</div>
             <div style="flex:1;">
               <div style="font-size:15px;font-weight:500;">${esc(i.name)}</div>
-              <div style="font-size:12px;color:var(--text-2);">${i.bal > 0 ? 'owes you' : 'you owe'}</div>
+              <div style="font-size:12px;color:var(--text-2);">${i.bal > 0 ? 'owes you' : 'you owe'}${i.hasPendingSettlement ? ' &middot; <span style="color:var(--amber-600);">payment claimed</span>' : ''}</div>
             </div>
             <div style="font-size:16px;font-weight:500;color:${i.bal > 0 ? 'var(--green-600)' : 'var(--red-600)'};">
               ${fmt(Math.abs(i.bal))}
@@ -2070,6 +2072,7 @@ function renderPosDetail() {
 
   const makeRow = (e, isSettled) => {
     const iCr = e.creditorUid === A.user.uid;
+    const isPendingSettlement = e.status === 'settlement_pending';
     return '<div style="padding:13px 16px;border-bottom:0.5px solid var(--border)' + (isSettled?';opacity:0.7':'') + ';">'
       + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:5px;">'
       + '<span style="font-size:14px;font-weight:500;flex:1;min-width:0;">' + (esc(e.description)||'No description') + '</span>'
@@ -2077,9 +2080,10 @@ function renderPosDetail() {
       + (iCr?'+':'-') + fmt(e.amount) + '</span></div>'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
       + '<span style="font-size:12px;color:var(--text-2);">' + fmtDate(e.date) + '</span>'
-      + (isSettled ? '<span class="tag tag-green">Settled</span>' : '<span class="tag tag-amber">Outstanding</span>')
+      + (isSettled ? '<span class="tag tag-green">Settled</span>' : isPendingSettlement ? '<span class="tag tag-amber">Payment claimed — confirm in Pending</span>' : '<span class="tag tag-amber">Outstanding</span>')
       + '</div>'
-      + (!isSettled ? '<div style="margin-top:8px;"><button class="btn btn-ghost" style="font-size:12px;padding:8px;" onclick="markSettled(\'' + e.id + '\')">Mark as settled</button></div>' : '')
+      + (isPendingSettlement ? '<div style="margin-top:6px;font-size:12px;color:var(--amber-600);">&#9888; ' + (iCr ? esc(e.debtorName) : esc(e.creditorName)) + ' says they\'ve paid — check your Pending tab to confirm.</div>' : '')
+      + (!isSettled && !isPendingSettlement ? '<div style="margin-top:8px;"><button class="btn btn-ghost" style="font-size:12px;padding:8px;" onclick="markSettled(\'' + e.id + '\')">Mark as settled</button></div>' : '')
       + '</div>';
   };
 
@@ -3448,7 +3452,7 @@ function subscribeToData(uid) {
       );
 
       // Outstanding agreed debts
-      A.ledger = all.filter(c => c.status === 'agreed' || c.status === 'accepted');
+      A.ledger = all.filter(c => c.status === 'agreed' || c.status === 'accepted' || c.status === 'settlement_pending');
       A.settled = all.filter(c => c.status === 'settled');
 
       // Fully settled history
