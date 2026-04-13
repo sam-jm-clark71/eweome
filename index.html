@@ -1502,6 +1502,11 @@ function renderReqDetail() {
             ? "Once you've received the money, mark this as settled."
             : "Once you've paid, tap below. The other person will need to confirm."}
         </p>
+        ${!iAmCreditor ? (
+          A.userDoc?.paymentLink
+            ? `<button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sharePaymentLink('${claim.id}')">&#128178; Send payment via link</button>`
+            : `<div style="font-size:12px;color:var(--text-2);text-align:center;padding:4px 0;">&#128161; <a href="#" onclick="go('settings');return false;" style="color:var(--green-600);">Add a payment link in Settings</a> to send money directly from here.</div>`
+        ) : ''}
         <button class="btn btn-ghost" style="padding:13px;" onclick="markSettled('${claim.id}')">
           ${iAmCreditor ? "I've received this money &#10003;" : "I've paid this &#10003;"}
         </button>
@@ -1661,6 +1666,21 @@ async function dismissRejected(id) {
     });
     go('home');
   } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+function sharePaymentLink(claimId) {
+  const all = [...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
+  const claim = all.find(c => c.id === claimId);
+  if (!claim) return;
+  const link = A.userDoc?.paymentLink || '';
+  const creditorName = claim.creditorName || 'them';
+  const text = 'Hi ' + esc(creditorName) + ' — paying you ' + fmt(claim.amount) +
+    (claim.description ? ' for ' + claim.description : '') + ' now.\n\n' + link;
+  if (navigator.share) {
+    navigator.share({ text }).catch(() => {});
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
 }
 
 async function markSettled(id) {
@@ -2844,6 +2864,15 @@ function renderNamePrompt() {
     </div>`;
 }
 
+async function savePaymentLink() {
+  const link = document.getElementById('payment-link-input')?.value.trim() || '';
+  try {
+    await db.collection('users').doc(A.user.uid).update({ paymentLink: link || null });
+    if (A.userDoc) A.userDoc.paymentLink = link || null;
+    showToast(link ? 'Payment link saved!' : 'Payment link removed.');
+  } catch(e) { showToast('Could not save. Please try again.'); }
+}
+
 async function saveDisplayName() {
   const name = document.getElementById('name-input')?.value.trim();
   if (!name) { showToast('Please enter your name.'); return; }
@@ -3061,6 +3090,12 @@ function renderSettings() {
           <button onclick="removeConnection('${c.id}')" style="background:none;border:none;color:var(--red-600);font-size:18px;cursor:pointer;padding:4px;">&#215;</button>
         </div>`).join('')}
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;margin-top:10px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
+    </div>
+    <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:15px;margin-bottom:6px;">Payment link</div>
+      <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">Optional. Add your Monzo, PayPal, Revolut or any other payment link here and a "Send payment" button will appear on agreed claims so you can share it easily.</p>
+      <input type="url" id="payment-link-input" class="input" placeholder="e.g. https://monzo.me/yourname" value="${esc(A.userDoc?.paymentLink||'')}" style="margin-bottom:8px;"/>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="savePaymentLink()">Save payment link</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:6px;">Notes</div>
