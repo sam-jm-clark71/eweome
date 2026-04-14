@@ -1363,7 +1363,8 @@ async function sendClaim() {
     if (!A.claim.pendingPhone) {
       const notifTitle = io ? (A.userDoc?.displayName||'Someone') + ' has logged an I Owe You' : (A.userDoc?.displayName||'Someone') + ' has sent you a request';
       const notifBody  = fmt(parseFloat(A.claim.amount)) + (A.claim.desc ? ' for ' + A.claim.desc : '');
-      sendPushNotification(debtUid, notifTitle, notifBody);
+      const notifTarget = io ? credUid : debtUid;
+      sendPushNotification(notifTarget, notifTitle, notifBody);
     }
     go(pfx() + '_sent');
   } catch (e) {
@@ -1498,7 +1499,7 @@ function renderReqDetail() {
             <textarea id="q-answer" class="input" rows="3" placeholder="Type your reply here…" style="resize:none;"></textarea>
             <button class="btn btn-green" style="padding:12px;" onclick="answerQuestion('${claim.id}')">Send reply</button>
             <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="acceptClaim('${claim.id}')">Accept the original amount anyway</button>
-            <button class="btn btn-grey" style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject the claim</button>
+            <button class="btn btn-grey" style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject — I don't owe this</button>
           </div>` : `
           <div style="font-size:12px;color:var(--text-2);text-align:center;padding:4px 0;">Accept their counter-offer, or counter back:</div>
           <button class="btn btn-green" style="padding:13px;" onclick="acceptCounter('${claim.id}',${claim.counterAmount})">Accept their ${fmt(claim.counterAmount)}</button>
@@ -1573,7 +1574,7 @@ function renderReqDetail() {
           <p style="font-size:13px;color:var(--amber-700);line-height:1.6;margin-bottom:10px;"><strong>${esc(claim.creditorName)} has uploaded evidence.</strong> Review it and decide.</p>
           <a href="${esc(claim.evidenceUrl)}" target="_blank" class="btn btn-green" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;text-decoration:none;">&#128247; View uploaded evidence</a>
           <div style="display:flex;flex-direction:column;gap:8px;">
-            <button class="btn btn-green" style="padding:11px;" onclick="acceptClaim('${claim.id}')">Accept this claim &#10003;</button>
+            <button class="btn btn-green" style="padding:11px;" onclick="acceptClaim('${claim.id}')">Accept — I owe this &#10003;</button>
             <button class="btn btn-amber" style="padding:11px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='amount';go('q_form')">Still want a different amount</button>
             <button class="btn btn-red" style="padding:11px;" onclick="startReject('${claim.id}')">Reject — I don't owe this</button>
           </div>`}
@@ -1581,11 +1582,15 @@ function renderReqDetail() {
 
     ${isRejectedNotice ? `
       <div style="padding:12px 16px;margin:8px 16px 0;background:var(--red-50);border-radius:var(--radius-sm);border:0.5px solid rgba(162,45,45,0.2);">
-        <p style="font-size:13px;color:var(--red-600);line-height:1.6;margin-bottom:10px;">
-          ${esc(claim.debtorName)} rejected this claim. It will not appear in either party's balance.
-          ${claim.rejectionNote ? '<br><br><em style="color:var(--text-2);">Their note: ' + esc(claim.rejectionNote) + '</em>' : ''}
+        <div style="font-size:12px;font-weight:500;color:var(--red-600);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Claim rejected</div>
+        <p style="font-size:13px;color:var(--text-1);line-height:1.6;margin-bottom:${claim.rejectionNote ? '8px' : '14px'};">        
+          ${esc(claim.debtorName)} has rejected this claim.
         </p>
-        <button class="btn btn-ghost" style="padding:10px;font-size:13px;" onclick="dismissRejected('${claim.id}')">OK, dismiss this</button>
+        ${claim.rejectionNote ? `<div style="background:white;border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid rgba(162,45,45,0.15);margin-bottom:14px;font-size:13px;color:var(--text-2);line-height:1.6;"><em>&ldquo;${esc(claim.rejectionNote)}&rdquo;</em></div>` : ''}
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button class="btn btn-ghost" style="padding:10px;font-size:13px;" onclick="sendRevisedClaim('${claim.id}')">&#9998; Send a revised claim</button>
+          <button class="btn btn-grey" style="padding:10px;font-size:13px;" onclick="dismissRejected('${claim.id}')">All good — drop it</button>
+        </div>
       </div>` : ''}`;
 }
 
@@ -1684,6 +1689,29 @@ async function confirmReject(id) {
 function goNextPending() {
   const next=A.pendingClaims.find(c=>c.id!==A.selectedClaimId);
   if(next){A.selectedClaimId=next.id;go('req_detail');}else go('home');
+}
+
+function sendRevisedClaim(claimId) {
+  const all = [...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
+  const claim = all.find(c => c.id === claimId) || 
+    A.pendingClaims.find(c => c.id === claimId);
+  if (!claim) return;
+  // Pre-fill a new claim with the rejected claim's details
+  A.claim = {
+    type:        'eweome',
+    personId:    claim.debtorUid,
+    personName:  claim.debtorName,
+    amount:      claim.amount ? String(claim.amount) : '',
+    desc:        claim.description || '',
+    date:        claim.date || today(),
+    note:        claim.rejectionNote ? 'Re-sent after rejection: \"' + claim.rejectionNote + '\"' : 'Re-sent after rejection',
+    recipients:  null,
+    pendingPhone: null
+  };
+  // Dismiss the rejected claim first
+  dismissRejected(claimId);
+  // Go straight to amount step so they can revise the amount before sending
+  go('ew_amt');
 }
 
 async function dismissRejected(id) {
@@ -1827,7 +1855,7 @@ async function sendQuestion() {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     if (claim) sendPushNotification(claim.creditorUid, (A.userDoc?.displayName||'Someone') + ' has a question about your claim', q.length > 60 ? q.slice(0,57)+'...' : q);
-    A.queryMode = 'choose';
+    A.queryMode = 'question';
     go('q_sent');
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
@@ -1849,6 +1877,8 @@ async function sendQuery() {
       counterComment: note || null,
       updatedAt:      firebase.firestore.FieldValue.serverTimestamp()
     });
+    const qClaim = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===A.selectedClaimId);
+    if (qClaim) sendPushNotification(qClaim.creditorUid, (A.userDoc?.displayName||'Someone') + ' has queried your claim', 'They\'ve proposed ' + fmt(parseFloat(amount)) + ' instead of ' + fmt(qClaim.amount));
     A.queryMode = 'choose';
     go('q_sent');
   } catch(e) { showToast('Something went wrong. Please try again.'); }
@@ -2392,7 +2422,7 @@ function renderPending() {
         let label, sublabel;
         if (isReject) {
           label = esc(c.debtorName) + ' rejected your claim';
-          sublabel = 'Tap to see their reason';
+          sublabel = 'Tap to see why and decide what to do';
         } else if (isSettle) {
           label = esc(c.debtorName) + ' says they\'ve paid you';
           sublabel = 'Tap to confirm you received it';
@@ -2424,13 +2454,15 @@ function renderPending() {
       </div>
       ${outgoing.map(c => {
         const outLabel = c.status === 'queried' && c.question && !c.counterAmount
-          ? 'Your question has been answered by ' + esc(c.debtorName)
+          ? (c.answeredQuestion
+              ? esc(c.debtorName) + ' has answered your question'
+              : 'Waiting for ' + esc(c.debtorName) + ' to answer your question')
           : c.status === 'queried' && c.counterAmount
           ? esc(c.debtorName) + ' has proposed a different amount'
           : 'Waiting for ' + esc(c.debtorName) + ' to respond';
         const outSub = c.status === 'queried' && c.answeredQuestion
           ? 'Tap to read their reply'
-          : c.status === 'queried'
+          : c.status === 'queried' && c.counterAmount
           ? 'Tap to see their counter-offer'
           : 'Tap to view or cancel';
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
@@ -3111,7 +3143,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.4.7</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.5.0</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
