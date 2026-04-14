@@ -479,6 +479,7 @@ async function enrichConnections(uid) {
     const effectiveUid = c.uid || c.id;
     return effectiveUid && !effectiveUid.startsWith('pending_') && (!c.email && !c.phone);
   });
+  console.log('enrichConnections: total conns:', conns.length, 'needsEnrich:', needsEnrich.length, needsEnrich.map(c=>({id:c.id,uid:c.uid,name:c.name,email:c.email,phone:c.phone})));
   if (needsEnrich.length === 0) return;
   _enriching = true;
   try {
@@ -3122,7 +3123,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.4.4</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.4.5</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
