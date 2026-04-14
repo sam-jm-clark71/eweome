@@ -2916,8 +2916,9 @@ async function saveOnboardingPhone() {
   if (!rawOb) { go('home'); return; }
   const normalised = normalisePhone(rawOb);
   try {
+    const displayName = A.userDoc?.displayName || A.user?.displayName || '';
     await db.collection('users').doc(A.user.uid).update({ phone: normalised });
-    await db.collection('users_by_phone').doc(normalised).set({ uid: A.user.uid, displayName: A.userDoc?.displayName || '' });
+    await db.collection('users_by_phone').doc(normalised).set({ uid: A.user.uid, displayName });
     A.needsOnboarding = false;
     go('home');
   } catch(e) { go('home'); }
@@ -3226,16 +3227,41 @@ async function addConnection() {
   try {
     // Look up whether they've already registered
     const isPhone = /^[+\d]/.test(email);
-    const lookupKey = isPhone ? email.replace(/\s/g,'') : email.toLowerCase();
+    const lookupKey = isPhone ? normalisePhone(email) : email.toLowerCase();
     let snap = await db.collection('users_by_phone').doc(lookupKey).get();
     if (!snap.exists) snap = await db.collection('users_by_email').doc(lookupKey).get();
-    const theirUid = snap.exists ? snap.data().uid : null;
+    let theirUid = snap.exists ? snap.data().uid : null;
+    let theirName = snap.exists ? (snap.data().displayName || name) : name;
+
+    // Fallback: search users collection directly by phone field
+    // (handles case where users_by_phone wasn't updated)
+    if (!theirUid && isPhone) {
+      const usersSnap = await db.collection('users').where('phone', '==', lookupKey).limit(1).get();
+      if (!usersSnap.empty) {
+        theirUid = usersSnap.docs[0].id;
+        theirName = usersSnap.docs[0].data().displayName || name;
+        // Fix the missing users_by_phone entry
+        await db.collection('users_by_phone').doc(lookupKey).set({ uid: theirUid, displayName: theirName });
+        console.log('Fixed missing users_by_phone entry for', lookupKey);
+      }
+    }
+    // Fallback: search users collection by email
+    if (!theirUid && !isPhone) {
+      const usersSnap = await db.collection('users').where('email', '==', lookupKey).limit(1).get();
+      if (!usersSnap.empty) {
+        theirUid = usersSnap.docs[0].id;
+        theirName = usersSnap.docs[0].data().displayName || name;
+        await db.collection('users_by_email').doc(lookupKey).set({ uid: theirUid, displayName: theirName });
+        console.log('Fixed missing users_by_email entry for', lookupKey);
+      }
+    }
+
     A._connNotFound = !theirUid;
     A._connNotFoundName = !theirUid ? (document.getElementById('nc-name')?.value.trim() || '') : '';
 
     const conn = {
       id:      theirUid || ('pending_' + Date.now()),
-      name,
+      name:    theirUid ? (theirName || name) : name,
       email,
       uid:     theirUid,
       color:   A.connections.length % 2 === 0 ? '' : 'amber',
@@ -3359,7 +3385,6 @@ async function ensureUserDoc(fbUser) {
     if (fbUser.phoneNumber) {
       const pn = fbUser.phoneNumber.replace(/\s/g,'');
       await db.collection('users_by_phone').doc(pn).set({ uid: fbUser.uid, displayName });
-      await db.collection('users_by_email').doc(pn).set({ uid: fbUser.uid, displayName });
     }
     if (!fbUser.phoneNumber) A.needsOnboarding = true;
   }
