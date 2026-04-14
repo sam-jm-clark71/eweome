@@ -467,45 +467,32 @@
 </div>
 
 <script>
+
 /* ================================================================
    CONNECTION ENRICHMENT
 ================================================================ */
-let _enriching = false;
-async function enrichConnections(uid) {
-  if (_enriching) return;
+async function enrichConnectionsFromPhoneLookup(uid) {
   const conns = A.connections || [];
-  // Enrich any connection with a real uid (not pending_...) but missing email/phone
-  const needsEnrich = conns.filter(c => {
+  const needsPhone = conns.filter(c => {
     const effectiveUid = c.uid || c.id;
-    return effectiveUid && !effectiveUid.startsWith('pending_') && (!c.email || c.email === '') && (!c.phone || c.phone === '');
+    return effectiveUid && !effectiveUid.startsWith('pending_') && !c.phone && !c.email;
   });
-  console.log('enrichConnections: total conns:', conns.length, 'needsEnrich:', needsEnrich.length, needsEnrich.map(c=>({id:c.id,uid:c.uid,name:c.name,email:c.email,phone:c.phone})));
-  if (needsEnrich.length === 0) return;
-  _enriching = true;
-  try {
-    let updated = false;
-    for (const c of needsEnrich) {
-      const effectiveUid = c.uid || c.id;
-      try {
-        const userDoc = await db.collection('users').doc(effectiveUid).get();
-        console.log('enriching', c.name, effectiveUid, 'exists:', userDoc.exists, userDoc.exists ? {phone: userDoc.data().phone, email: userDoc.data().email} : 'not found');
-        if (userDoc.exists) {
-          const data = userDoc.data();
-          const idx = A.connections.findIndex(x => x.id === c.id);
-          if (idx >= 0) {
-            if (data.phone) A.connections[idx].phone = data.phone;
-            if (data.email) A.connections[idx].email = data.email;
-            if (!A.connections[idx].uid) A.connections[idx].uid = effectiveUid;
-            updated = true;
-          }
-        }
-      } catch(e) { console.log('enrich error', c.name, e.message); }
-    }
-    if (updated) {
-      await db.collection('users').doc(uid).update({ connections: A.connections }).catch(()=>{});
-      render();
-    }
-  } finally { _enriching = false; }
+  if (needsPhone.length === 0) return;
+  let updated = false;
+  for (const c of needsPhone) {
+    const effectiveUid = c.uid || c.id;
+    try {
+      const snap = await db.collection('users_by_phone').where('uid','==',effectiveUid).limit(1).get();
+      if (!snap.empty) {
+        const idx = A.connections.findIndex(x => x.id === c.id);
+        if (idx >= 0) { A.connections[idx].phone = snap.docs[0].id; updated = true; }
+      }
+    } catch(e) {}
+  }
+  if (updated) {
+    await db.collection('users').doc(uid).update({ connections: A.connections }).catch(()=>{});
+    render();
+  }
 }
 
 /* ================================================================
@@ -3124,7 +3111,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.4.6</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.4.7</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3494,8 +3481,7 @@ function subscribeToData(uid) {
       if (snap.exists) {
         A.userDoc      = snap.data();
         A.connections  = snap.data().connections || [];
-        // Asynchronously enrich connections missing email/phone
-        enrichConnections(uid);
+        enrichConnectionsFromPhoneLookup(uid);
       }
       if (!['loading','signin'].includes(A.screen)) {
         checkDueClaims();
@@ -3544,6 +3530,7 @@ function subscribeToData(uid) {
       if (toAdd.length > 0) {
         const merged = [...(A.connections||[]), ...toAdd];
         db.collection('users').doc(uid).update({ connections: merged }).catch(() => {});
+        enrichConnectionsFromPhoneLookup(uid);
         A.connections = merged;
       }
 
