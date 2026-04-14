@@ -3056,9 +3056,18 @@ async function confirmBulkSettle(personId) {
 }
 
 async function removeConnection(id) {
-  const updated=(A.connections||[]).filter(c=>c.id!==id);
-  try { await db.collection('users').doc(A.user.uid).update({connections:updated}); A.connections=updated; render(); }
-  catch(e){showToast('Something went wrong. Please try again.');}
+  const conn = (A.connections||[]).find(c=>c.id===id);
+  showModal('Remove ' + (conn?.name || 'this connection') + '?', [
+    { label: 'Remove', style: 'btn-red', action: async () => {
+      const updated=(A.connections||[]).filter(c=>c.id!==id);
+      try { 
+        await db.collection('users').doc(A.user.uid).update({connections:updated}); 
+        A.connections=updated; 
+        render(); 
+      } catch(e){showToast('Something went wrong. Please try again.');}
+    }},
+    { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+  ]);
 }
 
 /* ================================================================
@@ -3268,7 +3277,13 @@ async function addConnection() {
       addedAt: new Date().toISOString()
     };
 
-    const updated = [...A.connections.filter(c => c.email !== email), conn];
+    // Remove any existing entries for same email OR same uid
+    const filtered = A.connections.filter(c => 
+      c.email !== email && 
+      !(theirUid && c.uid === theirUid) &&
+      !(theirUid && c.id === theirUid)
+    );
+    const updated = [...filtered, conn];
     await db.collection('users').doc(A.user.uid).update({ connections: updated });
     A.connections = updated;
 
