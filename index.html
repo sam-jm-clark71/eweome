@@ -474,20 +474,26 @@ let _enriching = false;
 async function enrichConnections(uid) {
   if (_enriching) return;
   const conns = A.connections || [];
-  const needsEnrich = conns.filter(c => c.uid && !c.email && !c.phone);
+  // Enrich any connection with a real uid (not pending_...) but missing email/phone
+  const needsEnrich = conns.filter(c => {
+    const effectiveUid = c.uid || c.id;
+    return effectiveUid && !effectiveUid.startsWith('pending_') && (!c.email && !c.phone);
+  });
   if (needsEnrich.length === 0) return;
   _enriching = true;
   try {
     let updated = false;
     for (const c of needsEnrich) {
+      const effectiveUid = c.uid || c.id;
       try {
-        const userDoc = await db.collection('users').doc(c.uid).get();
+        const userDoc = await db.collection('users').doc(effectiveUid).get();
         if (userDoc.exists) {
           const data = userDoc.data();
           const idx = A.connections.findIndex(x => x.id === c.id);
           if (idx >= 0) {
             if (data.phone) A.connections[idx].phone = data.phone;
             if (data.email) A.connections[idx].email = data.email;
+            if (!A.connections[idx].uid) A.connections[idx].uid = effectiveUid;
             updated = true;
           }
         }
@@ -3116,7 +3122,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.4.3</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.4.4</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
