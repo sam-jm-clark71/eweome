@@ -468,6 +468,39 @@
 
 <script>
 /* ================================================================
+   CONNECTION ENRICHMENT
+================================================================ */
+let _enriching = false;
+async function enrichConnections(uid) {
+  if (_enriching) return;
+  const conns = A.connections || [];
+  const needsEnrich = conns.filter(c => c.uid && !c.email && !c.phone);
+  if (needsEnrich.length === 0) return;
+  _enriching = true;
+  try {
+    let updated = false;
+    for (const c of needsEnrich) {
+      try {
+        const userDoc = await db.collection('users').doc(c.uid).get();
+        if (userDoc.exists) {
+          const data = userDoc.data();
+          const idx = A.connections.findIndex(x => x.id === c.id);
+          if (idx >= 0) {
+            if (data.phone) A.connections[idx].phone = data.phone;
+            if (data.email) A.connections[idx].email = data.email;
+            updated = true;
+          }
+        }
+      } catch(e) {}
+    }
+    if (updated) {
+      await db.collection('users').doc(uid).update({ connections: A.connections }).catch(()=>{});
+      render();
+    }
+  } finally { _enriching = false; }
+}
+
+/* ================================================================
    PUSH NOTIFICATIONS
 ================================================================ */
 // Called by Android APK after sign-in to save native FCM token
@@ -3107,7 +3140,12 @@ function renderSettings() {
           <div style="flex:1;min-width:0;">
             <div style="font-size:14px;font-weight:500;">${esc(c.name)}</div>
             <div style="font-size:11px;color:var(--text-2);">
-              ${[esc(c.email||''), c.phone ? esc(c.phone) : ''].filter(Boolean).join(' — ') || (!c.uid ? '' : 'No contact details stored')}
+              ${(() => {
+                const parts = [];
+                if (c.email) parts.push(esc(c.email));
+                if (c.phone) parts.push(esc(c.phone));
+                return parts.join(' — ');
+              })()}
               ${!c.uid ? '<span style="color:var(--amber-700);"> not yet registered</span>' : ''}
             </div>
           </div>
@@ -3445,6 +3483,8 @@ function subscribeToData(uid) {
       if (snap.exists) {
         A.userDoc      = snap.data();
         A.connections  = snap.data().connections || [];
+        // Asynchronously enrich connections missing email/phone
+        enrichConnections(uid);
       }
       if (!['loading','signin'].includes(A.screen)) {
         checkDueClaims();
@@ -3488,6 +3528,8 @@ function subscribeToData(uid) {
         db.collection('users').doc(uid).update({ connections: cleanedConns }).catch(()=>{});
         A.connections = cleanedConns;
       }
+      // Enrich existing connections that have uid but no email/phone
+      // by checking if we can find their details from users_by_phone
       if (toAdd.length > 0) {
         const merged = [...(A.connections||[]), ...toAdd];
         db.collection('users').doc(uid).update({ connections: merged }).catch(() => {});
