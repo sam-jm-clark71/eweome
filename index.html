@@ -477,7 +477,7 @@ async function enrichConnections(uid) {
   // Enrich any connection with a real uid (not pending_...) but missing email/phone
   const needsEnrich = conns.filter(c => {
     const effectiveUid = c.uid || c.id;
-    return effectiveUid && !effectiveUid.startsWith('pending_') && (!c.email && !c.phone);
+    return effectiveUid && !effectiveUid.startsWith('pending_') && (!c.email || c.email === '') && (!c.phone || c.phone === '');
   });
   console.log('enrichConnections: total conns:', conns.length, 'needsEnrich:', needsEnrich.length, needsEnrich.map(c=>({id:c.id,uid:c.uid,name:c.name,email:c.email,phone:c.phone})));
   if (needsEnrich.length === 0) return;
@@ -488,6 +488,7 @@ async function enrichConnections(uid) {
       const effectiveUid = c.uid || c.id;
       try {
         const userDoc = await db.collection('users').doc(effectiveUid).get();
+        console.log('enriching', c.name, effectiveUid, 'exists:', userDoc.exists, userDoc.exists ? {phone: userDoc.data().phone, email: userDoc.data().email} : 'not found');
         if (userDoc.exists) {
           const data = userDoc.data();
           const idx = A.connections.findIndex(x => x.id === c.id);
@@ -498,7 +499,7 @@ async function enrichConnections(uid) {
             updated = true;
           }
         }
-      } catch(e) {}
+      } catch(e) { console.log('enrich error', c.name, e.message); }
     }
     if (updated) {
       await db.collection('users').doc(uid).update({ connections: A.connections }).catch(()=>{});
@@ -3123,7 +3124,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.4.5</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.4.6</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3149,8 +3150,11 @@ function renderSettings() {
             <div style="font-size:11px;color:var(--text-2);">
               ${(() => {
                 const parts = [];
-                if (c.email) parts.push(esc(c.email));
+                const looksLikePhone = v => v && /^[+\d]/.test(v.trim());
+                // email field might actually contain a phone number (legacy data)
+                if (c.email && !looksLikePhone(c.email)) parts.push(esc(c.email));
                 if (c.phone) parts.push(esc(c.phone));
+                else if (c.email && looksLikePhone(c.email)) parts.push(esc(c.email));
                 return parts.join(' — ');
               })()}
               ${!c.uid ? '<span style="color:var(--amber-700);"> not yet registered</span>' : ''}
