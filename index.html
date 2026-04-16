@@ -2974,6 +2974,7 @@ async function proceedNewPerson() {
   const contact = document.getElementById('np-contact')?.value.trim();
   const statusEl = document.getElementById('np-status');
   if (!name) { showToast('Please enter their name.'); return; }
+  if (!A.claim.type) A.claim.type = 'eweome';
 
   // If no contact info given, treat as name-only log
   if (!contact) {
@@ -3041,8 +3042,9 @@ async function proceedNewPerson() {
       go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt');
     }
   } catch(e) { 
+    console.error('proceedNewPerson error:', e.code, e.message, e);
     if (statusEl) statusEl.textContent = '';
-    showToast('Something went wrong. Please try again.'); 
+    showToast('Error: ' + (e.message || 'Something went wrong')); 
   }
 }
 
@@ -3515,7 +3517,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.5.8</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.5.9</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
