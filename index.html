@@ -855,6 +855,7 @@ function render() {
     pending:    renderPending,
     onboarding:     renderOnboarding,
     find_friends:   renderFindFriends,
+    all_connections: renderAllConnections,
     search:          renderSearch,
     notes:           renderNotes,
     new_note:        renderNewNote,
@@ -1031,34 +1032,68 @@ function pfx() { return A.claim.type === 'ioowe' ? 'io' : 'ew'; }
 function renderWho() {
   const io = A.claim.type === 'ioowe';
   const q  = io ? 'Who do you owe?' : 'Who owes you?';
-
   const isMulti = A.claim.type === 'eweome';
   const selected = A.claim.recipients || [];
-  const connRows = A.connections.filter(c => c.id !== A.user.uid && c.uid !== A.user.uid).map(c => {
+  const q_val = A._whoSearch || '';
+
+  const allConns = [...A.connections]
+    .filter(c => c.id !== A.user.uid && c.uid !== A.user.uid)
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''));
+
+  // Match only from START of name
+  const filtered = q_val
+    ? allConns.filter(c => (c.name||'').toLowerCase().startsWith(q_val.toLowerCase()))
+    : [];
+
+  const connRows = filtered.map(c => {
     const isSel = selected.some(r => r.id === c.id);
-    return `<div class="list-item" onclick="toggleRecipient('${esc(c.id)}','${esc(c.name)}')" style="${isSel ? 'background:var(--green-50);' : ''}">
-      <div class="avatar ${c.color || ''}">${initials(c.name)}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:15px;font-weight:500;">${esc(c.name)}</div>
-        <div style="font-size:12px;color:var(--text-2);">${esc(c.email || '')}</div>
-      </div>
-      <div style="color:var(--text-3);font-size:20px;">${isMulti ? (isSel ? '&#10003;' : '&#43;') : '&#8250;'}</div>
-    </div>`;
+    const sub = [c.email, c.phone].filter(Boolean).join(' — ');
+    return '<div class="list-item" onclick="toggleRecipient(\''+esc(c.id)+'\',\''+esc(c.name)+'\')" style="'+(isSel?'background:var(--green-50);':'')+'">'
+      +'<div class="avatar '+(c.color||'')+'">'+initials(c.name)+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:15px;font-weight:500;">'+esc(c.name)+'</div>'
+      +(sub?'<div style="font-size:12px;color:var(--text-2);">'+esc(sub)+'</div>':'')
+      +'</div>'
+      +'<div style="color:var(--text-3);font-size:20px;">'+(isMulti?(isSel?'&#10003;':'&#43;'):'&#8250;')+'</div>'
+      +'</div>';
   }).join('');
+
+  const exactMatch = filtered.some(c => (c.name||'').toLowerCase() === q_val.toLowerCase());
+  const addNewRow = q_val && !exactMatch
+    ? '<div class="list-item" onclick="goNewPersonWithName(\''+esc(q_val)+'\')">' 
+      + '<div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:20px;">+</div>'
+      + '<div><div style="font-size:15px;font-weight:500;color:var(--green-600);">Add &ldquo;'+esc(q_val)+'&rdquo;</div>'
+      + '<div style="font-size:12px;color:var(--text-2);">Find by phone/email or log against name</div></div></div>'
+    : '';
+
+  const multiBar = isMulti && selected.length > 0
+    ? `<div style="padding:10px 16px;background:var(--green-50);display:flex;align-items:center;justify-content:space-between;border-bottom:0.5px solid var(--border);"><span style="font-size:13px;color:var(--green-600);font-weight:500;">${selected.length} selected: ${selected.map(r => esc(r.name)).join(', ')}</span><button class="btn btn-green" style="width:auto;padding:7px 14px;font-size:13px;" onclick="proceedMulti()">Continue &rarr;</button></div>`
+    : '';
+
+  const emptyHint = !q_val
+    ? '<div style="padding:20px 24px;text-align:center;"><div style="font-size:13px;color:var(--text-3);line-height:1.8;">Type a name to find a contact,<br>or to add someone new.</div></div>'
+    : '';
 
   return `
     ${hdr(q, 'home', 1, 4)}
-    ${isMulti && selected.length > 0 ? `<div style="padding:10px 16px;background:var(--green-50);display:flex;align-items:center;justify-content:space-between;border-bottom:0.5px solid var(--border);"><span style="font-size:13px;color:var(--green-600);font-weight:500;">${selected.length} selected: ${selected.map(r => esc(r.name)).join(', ')}</span><button class="btn btn-green" style="width:auto;padding:7px 14px;font-size:13px;" onclick="proceedMulti()">Continue &rarr;</button></div>` : ""}
-    ${connRows || `<div style="padding:16px 0 8px;text-align:center;">
-      <div style="font-size:13px;color:var(--text-2);line-height:1.7;">You haven't added anyone yet.<br>Add a connection below to start sending requests.</div>
-    </div>`}
-    <div class="list-item" onclick="go('new_person_claim')">
-      <div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:18px;">+</div>
-      <div>
-        <div style="font-size:15px;font-weight:500;color:var(--green-600);">Someone not in my contacts</div>
-        <div style="font-size:12px;color:var(--text-2);">Find them or log against their name</div>
-      </div>
-    </div>`;
+    ${multiBar}
+    <div style="padding:12px 16px 8px;">
+      <input type="text" class="input" id="who-search"
+        placeholder="Start typing a name…"
+        value="${esc(q_val)}"
+        oninput="A._whoSearch=this.value;render()"
+        autocomplete="off" autocorrect="off" autocapitalize="words"
+        style="margin:0;"/>
+    </div>
+    ${connRows}
+    ${addNewRow}
+    ${emptyHint}`;
+}
+
+function goNewPersonWithName(name) {
+  A._whoSearch = '';
+  A._newPersonPrefill = name;
+  go('new_person_claim');
 }
 
 function toggleRecipient(id, name) {
@@ -3134,6 +3169,53 @@ function skipOnboarding() { A.needsOnboarding = false; go('find_friends'); }
 /* ================================================================
    FIND FRIENDS
 ================================================================ */
+function renderAllConnections() {
+  const q = A._connSearch || '';
+  const sorted = [...A.connections].sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const filtered = q ? sorted.filter(c => (c.name||'').toLowerCase().startsWith(q.toLowerCase())) : sorted;
+
+  // Group alphabetically
+  const groups = {};
+  filtered.forEach(c => {
+    const letter = (c.name||'?')[0].toUpperCase();
+    if (!groups[letter]) groups[letter] = [];
+    groups[letter].push(c);
+  });
+
+  const rows = Object.keys(groups).sort().map(letter =>
+    '<div style="padding:6px 16px 2px;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;background:var(--surface-2,var(--surface));">'+letter+'</div>'
+    + groups[letter].map(c => {
+        const sub = [c.email, c.phone].filter(Boolean).join(' — ');
+        return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:0.5px solid var(--border);">'
+          +'<div class="avatar '+(c.color||'')+'" style="flex-shrink:0;">'+initials(c.name)+'</div>'
+          +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-size:15px;font-weight:500;">'+esc(c.name)+'</div>'
+          +(sub?'<div style="font-size:12px;color:var(--text-2);">'+esc(sub)+'</div>':'')
+          +(!c.uid?'<div style="font-size:11px;color:var(--amber-600);">Not yet registered</div>':'')
+          +'</div>'
+          +'<button onclick="removeConnection(\''+c.id+'\')" style="background:none;border:none;color:var(--red-600);font-size:18px;cursor:pointer;padding:4px;">&#215;</button>'
+          +'</div>';
+      }).join('')
+  ).join('');
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="A._connSearch='';go('settings')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">My connections</span>
+    </div>
+    <div style="padding:10px 16px 6px;">
+      <input type="text" class="input" id="conn-search"
+        placeholder="Search…"
+        value="${esc(q)}"
+        oninput="A._connSearch=this.value;render()"
+        autocomplete="off" style="margin:0;"/>
+    </div>
+    ${rows || '<div style="padding:24px;text-align:center;font-size:13px;color:var(--text-2);">No connections yet.</div>'}
+    <div style="padding:12px 16px;">
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A.claim.type=null;go('new_conn')">+ Add connection</button>
+    </div>`;
+}
+
 function renderFindFriends() {
   const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window) || window.AndroidBridge?.pickContact;
   return `
@@ -3411,7 +3493,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.5.4</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.5.5</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3431,37 +3513,12 @@ function renderSettings() {
     <div style="font-size:15px;">My connections (${A.connections.length})</div>
     <button onclick="go('find_friends')" style="background:none;border:none;font-size:12px;color:var(--green-600);cursor:pointer;padding:4px;">Find friends</button>
   </div>
-      <input type="text" id="conn-search" class="input" placeholder="Search connections…"
-        oninput="A._connSearch=this.value;render()" value="${esc(A._connSearch||'')}"
-        style="margin:0 0 8px;padding:9px 12px;font-size:13px;"/>
-      ${(() => {
-        const q = (A._connSearch||'').toLowerCase();
-        const conns = [...A.connections]
-          .sort((a,b) => (a.name||'').localeCompare(b.name||''))
-          .filter(c => !q || (c.name||'').toLowerCase().includes(q));
-        if (conns.length === 0) return '<div style="font-size:13px;color:var(--text-2);padding:8px 0;">' + (q ? 'No matches for "' + esc(q) + '"' : 'None yet') + '</div>';
-        return conns.map(c => `
-        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:0.5px solid var(--border);">
-          <div class="avatar ${c.color||''}" style="width:32px;height:32px;font-size:11px;flex-shrink:0;">${initials(c.name)}</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:500;">${esc(c.name)}</div>
-            <div style="font-size:11px;color:var(--text-2);">
-              ${(() => {
-                const parts = [];
-                const looksLikePhone = v => v && /^[+\d]/.test(v.trim());
-                // email field might actually contain a phone number (legacy data)
-                if (c.email && !looksLikePhone(c.email)) parts.push(esc(c.email));
-                if (c.phone) parts.push(esc(c.phone));
-                else if (c.email && looksLikePhone(c.email)) parts.push(esc(c.email));
-                return parts.join(' — ');
-              })()}
-              ${!c.uid ? '<span style="color:var(--amber-700);"> not yet registered</span>' : ''}
-            </div>
-          </div>
-          <button onclick="removeConnection('${c.id}')" style="background:none;border:none;color:var(--red-600);font-size:18px;cursor:pointer;padding:4px;">&#215;</button>
-        </div>`).join('');
-      })()}
-      <button class="btn btn-ghost" style="font-size:13px;padding:9px;margin-top:10px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
+      ${A.connections.length === 0
+        ? '<div style="font-size:13px;color:var(--text-2);margin-bottom:8px;">None yet — add your first connection below.</div>'
+        : '<div style="font-size:13px;color:var(--text-2);margin-bottom:10px;">' + A.connections.length + ' connection' + (A.connections.length !== 1 ? 's' : '') + '</div>'
+          + '<button class="btn btn-ghost" style="font-size:13px;padding:9px;margin-bottom:6px;" onclick="go(\'all_connections\')">View all connections &rarr;</button>'
+      }
+            <button class="btn btn-ghost" style="font-size:13px;padding:9px;margin-top:10px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:6px;">Payment link</div>
