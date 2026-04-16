@@ -2906,7 +2906,7 @@ function renderNewPersonClaim() {
   // Will be cleared after render uses it
   setTimeout(() => { A._newPersonPrefill = ''; }, 0);
   const back = io ? 'io_who' : 'ew_who';
-  const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window) || window.AndroidBridge?.pickContact;
+  const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window) || window.AndroidBridge?.getAllContacts;
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="go('${back}')" aria-label="Back">&#8249;</button>
@@ -3241,13 +3241,18 @@ async function scanContactsForFriends() {
   if (btn) { btn.textContent = 'Scanning...'; btn.disabled = true; }
   let contacts = [];
   try {
-    if (window.AndroidBridge?.pickContact) {
-      // APK: bulk contact scan not yet implemented — guide user
-      if (btn) { btn.textContent = 'Scan my contacts'; btn.disabled = false; }
-      if (resultsEl) resultsEl.innerHTML = '<div style="text-align:center;padding:12px 0;font-size:13px;color:var(--text-2);line-height:1.7;">Bulk scanning isn\'t available in the app yet.<br>Use \'Someone not in my contacts\' when sending a claim to find people by phone number.</div>';
-      return;
-    } else {
+    if (window.AndroidBridge?.getAllContacts) {
+      // APK: use native bulk contact scan
+      const raw = window.AndroidBridge.getAllContacts();
+      const parsed = JSON.parse(raw);
+      // Convert to same format as Web Contacts API
+      contacts = parsed.map(c => ({ name: [c.name], tel: [c.phone] }));
+    } else if ('contacts' in navigator && 'ContactsManager' in window) {
       contacts = await navigator.contacts.select(['name','tel'],{multiple:true});
+    } else {
+      if (btn) { btn.textContent = 'Scan my contacts'; btn.disabled = false; }
+      if (resultsEl) resultsEl.innerHTML = '<div style="text-align:center;padding:12px 0;font-size:13px;color:var(--text-2);">Contact scanning isn\'t available in this browser.</div>';
+      return;
     }
   } catch(e) {
     if (btn) { btn.textContent = 'Scan my contacts'; btn.disabled = false; }
@@ -3493,7 +3498,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.5.5</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.5.6</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
