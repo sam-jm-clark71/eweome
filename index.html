@@ -823,6 +823,12 @@ const PENDING_SCREENS = ['pending'];
    RENDER ENGINE
 ================================================================ */
 function render() {
+  // Save focus state before rebuilding DOM
+  const focusedId = document.activeElement?.id;
+  const focusedVal = document.activeElement?.value;
+  const selStart = document.activeElement?.selectionStart;
+  const selEnd = document.activeElement?.selectionEnd;
+
   const app = document.getElementById('app');
   const showNav = !['loading','signin','welcome'].includes(A.screen);
   const pendingCount = A.pendingClaims.length;
@@ -870,8 +876,20 @@ function render() {
     new_conn:   renderNewConn,
   }[A.screen] || renderLoading;
 
+  const restoreFocus = () => {
+    if (focusedId) {
+      const el = document.getElementById(focusedId);
+      if (el && el.tagName === 'INPUT') {
+        el.focus();
+        if (focusedVal !== undefined && el.value !== focusedVal) el.value = focusedVal;
+        try { el.setSelectionRange(selStart, selEnd); } catch(e) {}
+      }
+    }
+  };
+
   if (!showNav) {
     app.innerHTML = content();
+    restoreFocus();
     return;
   }
 
@@ -909,6 +927,7 @@ function render() {
         Settings
       </button>
     </nav>`;
+  restoreFocus();
 }
 
 /* ================================================================
@@ -3496,7 +3515,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.5.7</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.5.8</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
