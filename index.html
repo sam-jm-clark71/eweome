@@ -125,6 +125,8 @@
     .nav-item svg { width: 25px; height: 25px; stroke: currentColor; fill: none; stroke-width: 2; }
     .nav-item.pending-alert, .nav-item.pending-alert * { color: #BA7517 !important; }
     .nav-item.pending-alert svg, .nav-item.pending-alert svg * { stroke: #BA7517 !important; fill: none !important; }
+    .nav-item.pending-alert.active, .nav-item.pending-alert.active * { color: #BA7517 !important; }
+    .nav-item.pending-alert.active svg, .nav-item.pending-alert.active svg * { stroke: #BA7517 !important; fill: none !important; }
 
     /* ================================================================
        SCREEN HEADER
@@ -852,6 +854,7 @@ function render() {
     reject_form: renderRejectForm,
     pending:    renderPending,
     onboarding:     renderOnboarding,
+    find_friends:   renderFindFriends,
     search:          renderSearch,
     notes:           renderNotes,
     new_note:        renderNewNote,
@@ -859,6 +862,7 @@ function render() {
     welcome:         renderWelcome,
     name_prompt:     renderNamePrompt,
     unregistered_claim: renderUnregisteredClaim,
+    new_person_claim:    renderNewPersonClaim,
     help:            renderHelp,
     merge_accounts: renderMergeAccounts,
     settings:   renderSettings,
@@ -1048,18 +1052,11 @@ function renderWho() {
     ${connRows || `<div style="padding:16px 0 8px;text-align:center;">
       <div style="font-size:13px;color:var(--text-2);line-height:1.7;">You haven't added anyone yet.<br>Add a connection below to start sending requests.</div>
     </div>`}
-    <div class="list-item" onclick="go('new_conn')">
+    <div class="list-item" onclick="go('new_person_claim')">
       <div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:18px;">+</div>
       <div>
-        <div style="font-size:15px;font-weight:500;color:var(--green-600);">New connection</div>
-        <div style="font-size:12px;color:var(--text-2);">Add someone by email or phone</div>
-      </div>
-    </div>
-    <div class="list-item" onclick="go('unregistered_claim')">
-      <div class="avatar" style="background:var(--surface);color:var(--text-2);font-size:18px;">&#128221;</div>
-      <div>
-        <div style="font-size:15px;font-weight:500;color:var(--text-1);">Log for someone not on ewe-o-me</div>
-        <div style="font-size:12px;color:var(--text-2);">Track it in your app — invite them later</div>
+        <div style="font-size:15px;font-weight:500;color:var(--green-600);">Someone not in my contacts</div>
+        <div style="font-size:12px;color:var(--text-2);">Find them or log against their name</div>
       </div>
     </div>`;
 }
@@ -1353,8 +1350,10 @@ async function sendClaim() {
       status:       io ? 'agreed' : 'pending',
       counterAmount:   null,
       counterComment:  null,
-      participants:    A.claim.pendingPhone ? [credUid] : [credUid, debtUid],
+      participants:    (A.claim.pendingPhone || A.claim.pendingEmail || A.claim.isNameOnly) ? [credUid] : [credUid, debtUid],
       pendingPhone:    A.claim.pendingPhone || null,
+      pendingEmail:    A.claim.pendingEmail || null,
+      isNameOnly:      A.claim.isNameOnly || false,
       nextDue: A.claim.recurring ? nextDueDate(A.claim.recurrence, A.claim.date) : null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1393,8 +1392,25 @@ function renderSent() {
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;width:100%;">
         <button class="btn btn-green" style="padding:13px;" onclick="go('home')">Back to home</button>
         ${A._lastSentId ? `
-      ${A.claim.pendingPhone ? `<div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:12px 14px;border:0.5px solid var(--amber-100);margin-bottom:4px;"><div style="font-size:13px;color:var(--amber-800);line-height:1.6;">&#128221; Logged in your app. <strong>${esc(A.claim.personName)}</strong> isn't on ewe-o-me yet — share this with them so they can join!</div></div>` : ''}
-      <button class="btn ${A.claim.pendingPhone ? 'btn-green' : 'btn-ghost'}" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${A._lastSentId}')"><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><line x1='8.59' y1='13.51' x2='15.42' y2='17.49'/><line x1='15.41' y1='6.51' x2='8.59' y2='10.49'/></svg> Share via WhatsApp / other</button>` : ''}
+      ${A.claim.isNameOnly ? `
+        <div style="background:var(--surface);border-radius:var(--radius-sm);padding:12px 14px;border:0.5px solid var(--border);">
+          <div style="font-size:13px;color:var(--text-2);line-height:1.6;">&#128221; Logged in your app against <strong>${esc(A.claim.personName)}</strong>. No contact details — only you can see this.</div>
+        </div>` 
+      : (A.claim.pendingPhone || A.claim.pendingEmail) ? `
+        <div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:12px 14px;border:0.5px solid var(--amber-100);margin-bottom:4px;">
+          <div style="font-size:13px;color:var(--amber-800);line-height:1.6;">&#128221; Logged in your app. <strong>${esc(A.claim.personName)}</strong> isn't on ewe-o-me yet.</div>
+        </div>
+        <button class="btn btn-green" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${A._lastSentId}')">
+          <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><line x1='8.59' y1='13.51' x2='15.42' y2='17.49'/><line x1='15.41' y1='6.51' x2='8.59' y2='10.49'/></svg>
+          Invite ${esc(A.claim.personName)} &amp; share claim
+        </button>
+        <button class="btn btn-ghost" style="padding:10px;font-size:12px;" onclick="go('home')">Skip — I'll share later</button>` 
+      : `
+        <button class="btn btn-ghost" style="padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="shareViaSystem('${A._lastSentId}')">
+          <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><line x1='8.59' y1='13.51' x2='15.42' y2='17.49'/><line x1='15.41' y1='6.51' x2='8.59' y2='10.49'/></svg>
+          Share via WhatsApp / other
+        </button>`
+      }` : ''}
       </div>
     </div>`;
 }
@@ -1730,9 +1746,14 @@ function sharePaymentLink(claimId) {
   if (!claim) return;
   const link = A.userDoc?.paymentLink || '';
   const creditorName = claim.creditorName || 'them';
-  const text = 'Hi ' + esc(creditorName) + ' — paying you ' + fmt(claim.amount) +
+  const text = 'Hi ' + creditorName + ' — paying you ' + fmt(claim.amount) +
     (claim.description ? ' for ' + claim.description : '') + ' now.\n\n' + link;
-  if (navigator.share) {
+  // Use direct WhatsApp link if we have their phone number
+  const conn = (A.connections||[]).find(c => c.uid === claim.creditorUid || c.id === claim.creditorUid);
+  const phone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') : null;
+  if (phone) {
+    window.open('https://wa.me/' + phone + '?text=' + encodeURIComponent(text), '_blank');
+  } else if (navigator.share) {
     navigator.share({ text }).catch(() => {});
   } else {
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
@@ -2845,6 +2866,134 @@ function renderSearch() {
 /* ================================================================
    ONBOARDING
 ================================================================ */
+function renderNewPersonClaim() {
+  const io = A.claim.type === 'ioowe';
+  // Will be cleared after render uses it
+  setTimeout(() => { A._newPersonPrefill = ''; }, 0);
+  const back = io ? 'io_who' : 'ew_who';
+  const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window) || window.AndroidBridge?.pickContact;
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('${back}')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">${io ? 'Who do you owe?' : 'Who owes you?'}</span>
+    </div>
+    <div style="padding:20px 16px;display:flex;flex-direction:column;gap:14px;">
+      ${hasContactPicker ? `
+        <button class="btn btn-ghost" style="padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="pickNewPersonContact()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Pick from phone contacts
+        </button>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;height:0.5px;background:var(--border);"></div>
+          <span style="font-size:12px;color:var(--text-3);">or enter manually</span>
+          <div style="flex:1;height:0.5px;background:var(--border);"></div>
+        </div>` : ''}
+      <div>
+        <label class="field-label">Their name</label>
+        <input type="text" id="np-name" class="input" placeholder="e.g. Matt" autocomplete="off" value="${esc(A._newPersonPrefill||'')}"/>
+      </div>
+      <div>
+        <label class="field-label">Their phone or email</label>
+        <input type="text" id="np-contact" class="input" placeholder="07700 900000 or name@email.com" inputmode="email"/>
+      </div>
+      <div id="np-status" style="font-size:13px;color:var(--text-2);min-height:18px;"></div>
+      <button class="btn btn-green" style="padding:13px;" onclick="proceedNewPerson()">Continue &rarr;</button>
+    </div>`;
+}
+
+function pickNewPersonContact() {
+  window._contactPickerTarget = 'new_person';
+  if (window.AndroidBridge?.pickContact) {
+    window.AndroidBridge.pickContact();
+  } else if ('contacts' in navigator) {
+    navigator.contacts.select(['name','tel','email'],{multiple:false}).then(contacts => {
+      if (!contacts || !contacts.length) return;
+      const c = contacts[0];
+      const nameEl = document.getElementById('np-name');
+      const contactEl = document.getElementById('np-contact');
+      if (nameEl && c.name?.[0]) nameEl.value = c.name[0];
+      if (contactEl) contactEl.value = (c.tel?.[0]) || (c.email?.[0]) || '';
+    }).catch(() => {});
+  }
+}
+
+async function proceedNewPerson() {
+  const name    = document.getElementById('np-name')?.value.trim();
+  const contact = document.getElementById('np-contact')?.value.trim();
+  const statusEl = document.getElementById('np-status');
+  if (!name) { showToast('Please enter their name.'); return; }
+
+  // If no contact info given, treat as name-only log
+  if (!contact) {
+    A.claim.personId     = null;
+    A.claim.personName   = name;
+    A.claim.pendingPhone = null;
+    A.claim.pendingEmail = null;
+    A.claim.isNameOnly   = true;
+    go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt');
+    return;
+  }
+
+  const isPhone = /^[+\d]/.test(contact);
+  const lookupKey = isPhone ? normalisePhone(contact) : contact.toLowerCase();
+
+  if (statusEl) statusEl.textContent = 'Checking...';
+  try {
+    // Check if registered
+    let snap = isPhone
+      ? await db.collection('users_by_phone').doc(lookupKey).get()
+      : await db.collection('users_by_email').doc(lookupKey).get();
+
+    // Fallback: search users collection directly
+    if (!snap.exists) {
+      const field = isPhone ? 'phone' : 'email';
+      const usersSnap = await db.collection('users').where(field,'==',lookupKey).limit(1).get();
+      if (!usersSnap.empty) {
+        const uid = usersSnap.docs[0].id;
+        const dn  = usersSnap.docs[0].data().displayName || name;
+        // Fix missing lookup entry
+        const col = isPhone ? 'users_by_phone' : 'users_by_email';
+        await db.collection(col).doc(lookupKey).set({ uid, displayName: dn }).catch(()=>{});
+        snap = await db.collection(col).doc(lookupKey).get();
+      }
+    }
+
+    if (snap.exists) {
+      // Found — registered user
+      const theirUid  = snap.data().uid;
+      const theirName = snap.data().displayName || name;
+      A.claim.personId     = theirUid;
+      A.claim.personName   = theirName;
+      A.claim.pendingPhone = null;
+      A.claim.pendingEmail = null;
+      A.claim.isNameOnly   = false;
+      // Add to connections
+      const conn = { id: theirUid, uid: theirUid, name: theirName,
+        email: isPhone ? '' : lookupKey, phone: isPhone ? lookupKey : '',
+        color: A.connections.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() };
+      const filtered = A.connections.filter(c => c.uid !== theirUid && c.id !== theirUid);
+      const updatedConns = [...filtered, conn];
+      await db.collection('users').doc(A.user.uid).update({ connections: updatedConns }).catch(()=>{});
+      A.connections = updatedConns;
+      if (statusEl) statusEl.textContent = '';
+      showToast(theirName + ' is on ewe-o-me ✓');
+      go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt');
+    } else {
+      // Not registered
+      A.claim.personId     = null;
+      A.claim.personName   = name;
+      A.claim.pendingPhone = isPhone ? lookupKey : null;
+      A.claim.pendingEmail = isPhone ? null : lookupKey;
+      A.claim.isNameOnly   = false;
+      if (statusEl) statusEl.textContent = '';
+      go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt');
+    }
+  } catch(e) { 
+    if (statusEl) statusEl.textContent = '';
+    showToast('Something went wrong. Please try again.'); 
+  }
+}
+
 function renderUnregisteredClaim() {
   const io = A.claim.type === 'ioowe';
   return `
@@ -2871,14 +3020,10 @@ function renderUnregisteredClaim() {
 
 async function pickUnregisteredContact() {
   if (window.AndroidBridge?.pickContact) {
-    const result = window.AndroidBridge.pickContact();
-    if (result) {
-      try {
-        const data = JSON.parse(result);
-        if (data.name) document.getElementById('unreg-name').value = data.name.split(' ')[0];
-        if (data.phone) document.getElementById('unreg-phone').value = data.phone;
-      } catch(e) {}
-    }
+    // Set a flag so the callback knows which screen to populate
+    window._contactPickerTarget = 'unreg';
+    window.AndroidBridge.pickContact();
+    // Result delivered asynchronously via pickFromContactsResult()
   }
 }
 
@@ -2980,11 +3125,127 @@ async function saveOnboardingPhone() {
     await db.collection('users').doc(A.user.uid).update({ phone: normalised });
     await db.collection('users_by_phone').doc(normalised).set({ uid: A.user.uid, displayName });
     A.needsOnboarding = false;
-    go('home');
+    go('find_friends');
   } catch(e) { go('home'); }
 }
 
-function skipOnboarding() { A.needsOnboarding = false; go('home'); }
+function skipOnboarding() { A.needsOnboarding = false; go('find_friends'); }
+
+/* ================================================================
+   FIND FRIENDS
+================================================================ */
+function renderFindFriends() {
+  const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window) || window.AndroidBridge?.pickContact;
+  return `
+    <div class="signin-screen" style="padding:40px 24px;">
+      ${sheepSvg(50)}
+      <div style="text-align:center;">
+        <div style="font-size:18px;font-weight:500;margin-bottom:8px;">Find friends on ewe-o-me</div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:280px;">Scan your contacts to see who's already here. Nothing is stored — we just check and show you the matches.</p>
+      </div>
+      <div id="ff-results" style="width:100%;max-width:320px;"></div>
+      <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
+        ${hasContactPicker ? `
+          <button class="btn btn-green" style="padding:13px;" id="ff-scan-btn" onclick="scanContactsForFriends()">&#128269; Scan my contacts</button>` : `
+          <div style="font-size:13px;color:var(--text-2);text-align:center;line-height:1.7;">Contact scanning isn't available in this browser.<br>You can add friends manually from the home screen.</div>`}
+        <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;padding:8px;" onclick="go('home')">Skip for now &rarr;</button>
+      </div>
+    </div>`;
+}
+
+async function scanContactsForFriends() {
+  const btn = document.getElementById('ff-scan-btn');
+  const resultsEl = document.getElementById('ff-results');
+  if (btn) { btn.textContent = 'Scanning...'; btn.disabled = true; }
+  let contacts = [];
+  try {
+    if (window.AndroidBridge?.pickContact) {
+      // APK: bulk contact scan not yet implemented — guide user
+      if (btn) { btn.textContent = 'Scan my contacts'; btn.disabled = false; }
+      if (resultsEl) resultsEl.innerHTML = '<div style="text-align:center;padding:12px 0;font-size:13px;color:var(--text-2);line-height:1.7;">Bulk scanning isn\'t available in the app yet.<br>Use \'Someone not in my contacts\' when sending a claim to find people by phone number.</div>';
+      return;
+    } else {
+      contacts = await navigator.contacts.select(['name','tel'],{multiple:true});
+    }
+  } catch(e) {
+    if (btn) { btn.textContent = 'Scan my contacts'; btn.disabled = false; }
+    return;
+  }
+  if (!contacts || contacts.length === 0) {
+    if (btn) { btn.textContent = 'Scan my contacts'; btn.disabled = false; }
+    return;
+  }
+  // Extract all phone numbers
+  const phoneMap = {};
+  for (const c of contacts) {
+    const name = c.name?.[0] || '';
+    for (const tel of (c.tel || [])) {
+      const norm = normalisePhone(tel);
+      if (norm) phoneMap[norm] = name;
+    }
+  }
+  // Check each against users_by_phone in batches of 30
+  const found = [];
+  const phones = Object.keys(phoneMap);
+  for (let i = 0; i < phones.length; i += 30) {
+    const batch = phones.slice(i, i + 30);
+    try {
+      const snap = await db.collection('users_by_phone')
+        .where(firebase.firestore.FieldPath.documentId(), 'in', batch).get();
+      snap.docs.forEach(doc => {
+        if (doc.data().uid !== A.user.uid) {
+          found.push({ uid: doc.data().uid,
+            name: doc.data().displayName || phoneMap[doc.id] || 'Unknown',
+            phone: doc.id });
+        }
+      });
+    } catch(e) {}
+  }
+  if (btn) btn.style.display = 'none';
+  if (found.length === 0) {
+    if (resultsEl) resultsEl.innerHTML = '<div style="text-align:center;padding:16px 0;"><div style="font-size:14px;color:var(--text-2);line-height:1.7;">None of your contacts are on ewe-o-me yet.<br><span style="font-size:12px;">You can invite them when you send a claim.</span></div></div>';
+    return;
+  }
+  A._friendScanResults = found;
+  if (resultsEl) {
+    resultsEl.innerHTML = '<div style="font-size:13px;font-weight:500;color:var(--green-600);text-align:center;margin-bottom:12px;">' + found.length + ' contact' + (found.length > 1 ? 's' : '') + ' already on ewe-o-me!</div>'
+      + found.map((f,i) => '<div id="ff-row-' + i + '" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--border);">'
+        + '<div class="avatar">' + initials(f.name) + '</div>'
+        + '<div style="flex:1;"><div style="font-size:14px;font-weight:500;">' + esc(f.name) + '</div></div>'
+        + '<button id="ff-btn-' + i + '" class="btn btn-green" style="width:auto;padding:7px 14px;font-size:13px;" onclick="addFriendFromScan(' + i + ')">Add</button>'
+        + '</div>').join('')
+      + '<button class="btn btn-ghost" style="margin-top:12px;padding:11px;font-size:13px;" onclick="go(\'home\')">Done &rarr;</button>';
+  }
+}
+
+async function addFriendFromScan(idx) {
+  const f = A._friendScanResults?.[idx];
+  if (!f) return;
+  const btn = document.getElementById('ff-btn-' + idx);
+  if (btn) { btn.textContent = 'Adding...'; btn.disabled = true; }
+  try {
+    const alreadyConn = (A.connections||[]).some(c => c.uid === f.uid || c.id === f.uid);
+    if (!alreadyConn) {
+      const conn = { id: f.uid, uid: f.uid, name: f.name, phone: f.phone, email: '',
+        color: A.connections.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() };
+      const updated = [...A.connections, conn];
+      await db.collection('users').doc(A.user.uid).update({ connections: updated });
+      A.connections = updated;
+      // Notify the friend they were added
+      await db.collection('notifications').add({
+        toUid: f.uid,
+        title: (A.userDoc?.displayName || 'Someone') + ' added you on ewe-o-me',
+        body: 'You can now send each other payment requests.',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        sent: false
+      });
+    }
+    if (btn) { btn.textContent = 'Added ✓'; btn.style.background = 'var(--green-600)'; }
+  } catch(e) {
+    if (btn) { btn.textContent = 'Add'; btn.disabled = false; }
+    showToast('Something went wrong. Please try again.');
+  }
+}
 
 /* ================================================================
    MERGE ACCOUNTS
@@ -3075,7 +3336,14 @@ function shareViaSystem(claimId) {
   const recipientUid = claim.type==='ioowe' ? claim.creditorUid : claim.debtorUid;
   const isNew = !(A.connections||[]).some(c => c.id === recipientUid);
   const text=buildShareText(claim, isNew);
-  if(navigator.share) navigator.share({text}).catch(()=>{}); else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+  // Use direct WhatsApp link if we have the recipient's phone
+  const conn = (A.connections||[]).find(c => c.uid === recipientUid || c.id === recipientUid);
+  const recipientPhone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') : 
+    (claim.pendingPhone ? claim.pendingPhone.replace(/[^\d+]/g,'') : null);
+  const waUrl = recipientPhone 
+    ? 'https://wa.me/' + recipientPhone + '?text=' + encodeURIComponent(text)
+    : 'https://wa.me/?text=' + encodeURIComponent(text);
+  if(navigator.share) navigator.share({text}).catch(()=>{}); else window.open(waUrl,'_blank');
 }
 
 /* ================================================================
@@ -3143,7 +3411,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.5.0</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.5.4</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3159,9 +3427,20 @@ function renderSettings() {
       ${!A.userDoc?.phone && !A.user?.phoneNumber ? `<button class="btn btn-ghost" style="font-size:12px;padding:6px 10px;margin-top:6px;width:auto;" onclick="go('onboarding')">Add phone number</button>` : ''}
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
-      <div style="font-size:15px;margin-bottom:10px;">My connections (${A.connections.length})</div>
-      ${A.connections.length === 0 ? '<span style="font-size:13px;color:var(--text-2);">None yet</span>' : ''}
-      ${A.connections.map(c => `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <div style="font-size:15px;">My connections (${A.connections.length})</div>
+    <button onclick="go('find_friends')" style="background:none;border:none;font-size:12px;color:var(--green-600);cursor:pointer;padding:4px;">Find friends</button>
+  </div>
+      <input type="text" id="conn-search" class="input" placeholder="Search connections…"
+        oninput="A._connSearch=this.value;render()" value="${esc(A._connSearch||'')}"
+        style="margin:0 0 8px;padding:9px 12px;font-size:13px;"/>
+      ${(() => {
+        const q = (A._connSearch||'').toLowerCase();
+        const conns = [...A.connections]
+          .sort((a,b) => (a.name||'').localeCompare(b.name||''))
+          .filter(c => !q || (c.name||'').toLowerCase().includes(q));
+        if (conns.length === 0) return '<div style="font-size:13px;color:var(--text-2);padding:8px 0;">' + (q ? 'No matches for "' + esc(q) + '"' : 'None yet') + '</div>';
+        return conns.map(c => `
         <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:0.5px solid var(--border);">
           <div class="avatar ${c.color||''}" style="width:32px;height:32px;font-size:11px;flex-shrink:0;">${initials(c.name)}</div>
           <div style="flex:1;min-width:0;">
@@ -3180,7 +3459,8 @@ function renderSettings() {
             </div>
           </div>
           <button onclick="removeConnection('${c.id}')" style="background:none;border:none;color:var(--red-600);font-size:18px;cursor:pointer;padding:4px;">&#215;</button>
-        </div>`).join('')}
+        </div>`).join('');
+      })()}
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;margin-top:10px;" onclick="A.claim.type=null;go('new_conn')">Add connection</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3244,10 +3524,27 @@ function renderNewConn() {
 window.pickFromContactsResult = function(json) {
   try {
     const data = JSON.parse(json);
-    const el = document.getElementById('nc-name');
-    const el2 = document.getElementById('nc-email');
-    if (el && data.name) el.value = data.name;
-    if (el2 && (data.phone || data.email)) el2.value = data.phone || data.email;
+    const target = window._contactPickerTarget || 'conn';
+    window._contactPickerTarget = null;
+    if (target === 'new_person') {
+      // New person claim screen
+      const nameEl = document.getElementById('np-name');
+      const contactEl = document.getElementById('np-contact');
+      if (nameEl && data.name) nameEl.value = data.name;
+      if (contactEl && (data.phone || data.email)) contactEl.value = data.phone || data.email;
+    } else if (target === 'unreg') {
+      // Legacy unregistered claim screen
+      const nameEl = document.getElementById('unreg-name');
+      const phoneEl = document.getElementById('unreg-phone');
+      if (nameEl && data.name) nameEl.value = data.name.split(' ')[0];
+      if (phoneEl && data.phone) phoneEl.value = data.phone;
+    } else {
+      // New connection screen
+      const el = document.getElementById('nc-name');
+      const el2 = document.getElementById('nc-email');
+      if (el && data.name) el.value = data.name;
+      if (el2 && (data.phone || data.email)) el2.value = data.phone || data.email;
+    }
   } catch(e) { console.log('Contact result error:', e); }
 };
 
