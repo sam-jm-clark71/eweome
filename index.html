@@ -2997,20 +2997,6 @@ async function proceedNewPerson() {
       ? await db.collection('users_by_phone').doc(lookupKey).get()
       : await db.collection('users_by_email').doc(lookupKey).get();
 
-    // Fallback: search users collection directly
-    if (!snap.exists) {
-      const field = isPhone ? 'phone' : 'email';
-      const usersSnap = await db.collection('users').where(field,'==',lookupKey).limit(1).get();
-      if (!usersSnap.empty) {
-        const uid = usersSnap.docs[0].id;
-        const dn  = usersSnap.docs[0].data().displayName || name;
-        // Fix missing lookup entry
-        const col = isPhone ? 'users_by_phone' : 'users_by_email';
-        await db.collection(col).doc(lookupKey).set({ uid, displayName: dn }).catch(()=>{});
-        snap = await db.collection(col).doc(lookupKey).get();
-      }
-    }
-
     if (snap.exists) {
       // Found — registered user
       const theirUid  = snap.data().uid;
@@ -3517,7 +3503,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.5.9</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.6.0</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
