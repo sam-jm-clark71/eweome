@@ -665,6 +665,10 @@ const A = {
 /* ================================================================
    UTILITIES
 ================================================================ */
+function isIOS()     { return /iP(hone|ad|od)/.test(navigator.userAgent); }
+function isAndroid() { return /Android/.test(navigator.userAgent); }
+function isAPK()     { return !!window.AndroidBridge; }
+function isSafari()  { return /^((?!chrome|android).)*safari/i.test(navigator.userAgent); }
 function fmt(n)   { return '\u00a3' + parseFloat(n || 0).toFixed(2); }
 function today()  { return new Date().toISOString().split('T')[0]; }
 
@@ -1032,6 +1036,8 @@ function renderHome() {
 
 function startClaim(type) {
   A.claim = { type, personId: null, personName: null, amount: '', date: today(), desc: '', onAccount: false, recurring: false, recurrence: { freq: 'monthly', day: 'Monday', dayOfMonth: 1 }, recipients: [] };
+  A._whoSearch = '';
+  A._newPersonPrefill = '';
   go(type === 'eweome' ? 'ew_who' : 'io_who');
 }
 
@@ -3524,7 +3530,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.6.3</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.6.5</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
