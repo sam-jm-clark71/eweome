@@ -810,6 +810,11 @@ function googleIcon() {
 ================================================================ */
 function go(screen) {
   A.screen = screen;
+  // Save stable screens for refresh restore
+  const restorable = ['home','position','pending','all_connections','notes','help'];
+  if (restorable.includes(screen)) {
+    try { localStorage.setItem('eweome_last_screen', screen); } catch(e) {}
+  }
   render();
   const el = document.querySelector('.screen');
   if (el) el.scrollTop = 0;
@@ -3530,7 +3535,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.6.5</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.6.6</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3887,10 +3892,10 @@ async function ensureUserDoc(fbUser) {
   // Check if display name is missing or is just a phone number
   const name = A.userDoc?.displayName || fbUser.displayName || '';
   const looksLikePhone = /^[+\d\s]{7,}$/.test(name.trim());
-  // Only prompt for name if it's clearly missing AND it's a fresh signup
-  // Don't interrupt a returning user on refresh
-  const isFirstVisit = !localStorage.getItem('eweome_welcome_seen');
-  A.needsDisplayName = (!name || looksLikePhone) && isFirstVisit;
+  // Only show name prompt if name is completely missing
+  // Don't interrupt existing users whose name happens to look like a phone
+  const hasConnections = (A.userDoc?.connections || []).length > 0;
+  A.needsDisplayName = !name && !hasConnections;
 }
 
 /* ================================================================
@@ -4018,7 +4023,11 @@ auth.onAuthStateChanged(async fbUser => {
     if (A.needsDisplayName) go('name_prompt');
     else if (A.needsOnboarding) go('onboarding');
     else if (!A.welcomeSeen && !localStorage.getItem('eweome_welcome_seen')) go('welcome');
-    else go('home');
+    else {
+      const restorable = ['home','position','pending','all_connections','notes','help'];
+      const last = localStorage.getItem('eweome_last_screen');
+      go(last && restorable.includes(last) ? last : 'home');
+    }
     // Will redirect to pending after data loads if needed
   } else {
     A.user        = null;
