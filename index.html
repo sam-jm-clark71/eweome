@@ -1082,9 +1082,12 @@ function renderWho() {
     .filter(c => c.id !== A.user.uid && c.uid !== A.user.uid)
     .sort((a,b) => (a.name||'').localeCompare(b.name||''));
 
-  // Match only from START of name
+  // Match from start of name, OR anywhere in phone number
   const filtered = q_val
-    ? allConns.filter(c => (c.name||'').toLowerCase().startsWith(q_val.toLowerCase()))
+    ? allConns.filter(c =>
+        (c.name||'').toLowerCase().startsWith(q_val.toLowerCase()) ||
+        (c.phone||'').replace(/\s/g,'').includes(q_val.replace(/\s/g,''))
+      )
     : [];
 
   const connRows = filtered.map(c => {
@@ -3226,7 +3229,7 @@ function renderAllConnections() {
         return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:0.5px solid var(--border);">'
           +'<div class="avatar '+(c.color||'')+'" style="flex-shrink:0;">'+initials(c.name)+'</div>'
           +'<div style="flex:1;min-width:0;">'
-          +'<div style="font-size:15px;font-weight:500;">'+esc(c.name)+'</div>'
+          +'<div style="font-size:15px;font-weight:500;">'+(c.name && !/^[+\d\s]{7,}$/.test(c.name.trim()) ? esc(c.name) : '<span style="color:var(--text-3);font-style:italic;">No name stored</span>')+'</div>'
           +(sub?'<div style="font-size:12px;color:var(--text-2);">'+esc(sub)+'</div>':'')
           +(!c.uid?'<div style="font-size:11px;color:var(--amber-600);">Not yet registered</div>':'')
           +'</div>'
@@ -3535,7 +3538,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.6.6</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.6.7</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3943,12 +3946,24 @@ function subscribeToData(uid) {
       const connIds = new Set((A.connections||[]).map(c => c.id));
       const toAdd = [];
       all.forEach(c => {
-        if (c.creditorUid === uid && !connIds.has(c.debtorUid) && c.debtorUid && c.debtorUid !== uid && !removedIds.has(c.debtorUid)) {
-          connIds.add(c.debtorUid);
-          toAdd.push({ id: c.debtorUid, name: c.debtorName, email: '', uid: c.debtorUid, color: toAdd.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
-        } else if (c.debtorUid === uid && !connIds.has(c.creditorUid) && c.creditorUid && c.creditorUid !== uid && !removedIds.has(c.creditorUid)) {
-          connIds.add(c.creditorUid);
-          toAdd.push({ id: c.creditorUid, name: c.creditorName, email: '', uid: c.creditorUid, color: toAdd.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
+        // Fix name if existing connection has blank/phone-number name
+        const fixConnName = (existingId, betterName) => {
+          if (!betterName || /^[+\d\s]{7,}$/.test(betterName.trim())) return;
+          const ci = A.connections.findIndex(x => x.id === existingId);
+          if (ci >= 0 && (!A.connections[ci].name || /^[+\d\s]{7,}$/.test((A.connections[ci].name||'').trim()))) {
+            A.connections[ci].name = betterName;
+          }
+        };
+        if (c.creditorUid === uid && c.debtorUid && c.debtorUid !== uid && !removedIds.has(c.debtorUid)) {
+          if (!connIds.has(c.debtorUid)) {
+            connIds.add(c.debtorUid);
+            toAdd.push({ id: c.debtorUid, name: c.debtorName, email: '', uid: c.debtorUid, color: toAdd.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
+          } else { fixConnName(c.debtorUid, c.debtorName); }
+        } else if (c.debtorUid === uid && c.creditorUid && c.creditorUid !== uid && !removedIds.has(c.creditorUid)) {
+          if (!connIds.has(c.creditorUid)) {
+            connIds.add(c.creditorUid);
+            toAdd.push({ id: c.creditorUid, name: c.creditorName, email: '', uid: c.creditorUid, color: toAdd.length % 2 === 0 ? '' : 'amber', addedAt: new Date().toISOString() });
+          } else { fixConnName(c.creditorUid, c.creditorName); }
         }
       });
       const cleanedConns = (A.connections||[]).filter(c => c.id !== uid && c.uid !== uid);
