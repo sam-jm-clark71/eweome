@@ -521,14 +521,25 @@ window.saveNativeFcmToken = async function(uid, token) {
 };
 
 async function requestNotificationPermission(uid) {
-  if (!messaging) return;
+  // Skip if this is the APK (handled natively)
+  if (window.AndroidBridge) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'denied') return;
   try {
-    const permission = await Notification.requestPermission();
+    const permission = Notification.permission === 'granted'
+      ? 'granted'
+      : await Notification.requestPermission();
     if (permission !== 'granted') return;
+    // Register service worker for background push
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(e => 
+        console.log('SW registration failed:', e.message));
+    }
+    if (!messaging) return;
     const token = await messaging.getToken({ vapidKey: VAPID_KEY });
     if (token) {
       await db.collection('users').doc(uid).update({ fcmToken: token, fcmUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-      console.log('FCM token saved');
+      console.log('Web push token saved:', token.slice(0,20) + '...');
     }
   } catch(e) { console.log('Notification setup failed:', e.message); }
 }
@@ -1004,6 +1015,9 @@ function renderHome() {
   const hp = A.pendingClaims.length > 0;
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   const showIOSBanner = isIOS() && !isStandalone && !sessionStorage.getItem('ios_banner_dismissed');
+  const showNotifPrompt = !isAPK() && !isIOS() && 'Notification' in window 
+    && Notification.permission === 'default' 
+    && !sessionStorage.getItem('notif_prompt_dismissed');
   return `
     <div style="padding:14px 16px 8px;display:flex;align-items:center;gap:12px;">
       ${sheepSvg(52)}
@@ -1012,6 +1026,18 @@ function renderHome() {
       </div>
       <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
+    ${showNotifPrompt ? `
+      <div style="margin:0 16px 4px;padding:11px 13px;background:#F0F4FF;border-radius:var(--radius-sm);border:0.5px solid #C0CCEE;display:flex;align-items:flex-start;gap:10px;">
+        <div style="font-size:18px;">&#128276;</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px;">Enable notifications</div>
+          <div style="font-size:12px;color:var(--text-2);line-height:1.5;">Get notified when someone sends you a claim or responds to yours.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+          <button onclick="requestNotificationPermission('${A.user?.uid}');sessionStorage.setItem('notif_prompt_dismissed','1');render()" style="background:var(--green-600);color:white;border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:500;padding:5px 10px;cursor:pointer;">Enable</button>
+          <button onclick="sessionStorage.setItem('notif_prompt_dismissed','1');render()" style="background:none;border:none;font-size:11px;color:var(--text-3);cursor:pointer;padding:2px;">Not now</button>
+        </div>
+      </div>` : ''}
     ${showIOSBanner ? `
       <div style="margin:0 16px 4px;padding:11px 13px;background:#EEF5FF;border-radius:var(--radius-sm);border:0.5px solid #B8D4F0;display:flex;align-items:flex-start;gap:10px;">
         <div style="font-size:18px;">&#128241;</div>
@@ -2595,7 +2621,7 @@ function renderPending() {
       </div>` : ''}
     ${incoming.length > 0 ? `
       <div style="padding:10px 16px 6px;">
-        <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Needs your response</div>
+        <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Action needed</div>
       </div>
       ${incoming.map(c => {
         const isReject = c.status === 'rejected';
@@ -2635,7 +2661,7 @@ function renderPending() {
     ` : ''}
     ${outgoing.length > 0 ? `
       <div style="padding:10px 16px 6px;${incoming.length > 0 ? 'border-top:0.5px solid var(--border);margin-top:4px;' : ''}">
-        <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Waiting for response</div>
+        <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Sent — waiting on them</div>
       </div>
       ${outgoing.map(c => {
         const isIOU = c.type === 'ioowe';
@@ -3666,7 +3692,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.7.4</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.7.5</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -4141,8 +4167,7 @@ function subscribeToData(uid) {
         (c.status === 'pending'           && c.creditorUid === uid && c.type !== 'ioowe') ||
         // IOU debtor waiting for creditor response (they sent it)
         (c.status === 'pending'           && c.debtorUid   === uid && c.type === 'ioowe') ||
-        (c.status === 'queried'           && c.debtorUid   === uid && !c.answeredQuestion) ||
-        (c.status === 'settlement_pending' && c.debtorUid  === uid)
+        (c.status === 'queried'           && c.debtorUid   === uid && !c.answeredQuestion)
         )
       );
 
