@@ -1385,8 +1385,18 @@ async function sendMultiClaim() {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }
-  try { await batch.commit(); go('ew_sent'); }
-  catch(e) { showToast('Something went wrong. Please try again.'); }
+  try {
+    await batch.commit();
+    // Notify each registered recipient
+    const notifTitle = (A.userDoc?.displayName||'Someone') + ' has sent you a request';
+    const notifBody = fmt(parseFloat(A.claim.amount)) + (A.claim.desc ? ' for ' + A.claim.desc : '');
+    for (const r of A.claim.recipients) {
+      if (r.id && !r.id.startsWith('pending_')) {
+        sendPushNotification(r.id, notifTitle, notifBody);
+      }
+    }
+    go('ew_sent');
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function sendClaim() {
@@ -1396,9 +1406,11 @@ async function sendClaim() {
   const claimDateMs = new Date(A.claim.date).getTime();
   const threeDays = 3 * 24 * 60 * 60 * 1000;
   const allClaims = [...A.pendingClaims, ...A.sentClaims, ...A.ledger, ...A.settled];
+  const io_dup = A.claim.type === 'ioowe';
   const dup = allClaims.find(c =>
-    c.creditorUid === A.user.uid &&
-    c.debtorUid === A.claim.personId &&
+    // For YOM: we are creditor. For IOU: we are debtor
+    (io_dup ? c.debtorUid === A.user.uid && c.creditorUid === A.claim.personId
+            : c.creditorUid === A.user.uid && c.debtorUid === A.claim.personId) &&
     parseFloat(c.amount) === parseFloat(A.claim.amount) &&
     Math.abs(new Date(c.date||'').getTime() - claimDateMs) <= threeDays
   );
@@ -1469,7 +1481,7 @@ function renderSent() {
   return `
     <div class="success-screen">
       ${sheepSvg(72)}
-      <div style="font-size:22px;font-weight:500;">Claim sent!</div>
+      <div style="font-size:22px;font-weight:500;">${io ? 'I Owe You logged!' : 'Claim sent!'}</div>
       <div style="font-size:14px;color:var(--text-2);line-height:1.8;">
         ${A.claim.recipients && A.claim.recipients.length > 1 ? A.claim.recipients.map(r => esc(r.name)).join(', ') : esc(A.claim.personName)}
         ${io
@@ -1517,7 +1529,9 @@ function renderReqDetail() {
 
   const iAmDebtor   = claim.debtorUid   === A.user.uid;
   const iAmCreditor = claim.creditorUid === A.user.uid;
-  const isIncoming  = iAmDebtor && claim.status === 'pending';
+  const isIOU = claim.type === 'ioowe';
+  // For YOM: incoming = debtor. For IOU: incoming = creditor (they receive the IOU)
+  const isIncoming  = claim.status === 'pending' && (isIOU ? iAmCreditor : iAmDebtor);
   const counterPendingOnMe = iAmCreditor && claim.status === 'queried';
   const isRejectedNotice = iAmCreditor && claim.status === 'rejected';
 
@@ -1529,7 +1543,7 @@ function renderReqDetail() {
     <div style="padding:16px 16px 0;">
       <div style="text-align:center;padding:16px 0 20px;">
         <div style="font-size:13px;color:var(--text-2);">
-          ${esc(claim.creditorName)} says ${iAmDebtor ? 'you owe' : 'they are owed'}
+          ${isIOU && iAmCreditor ? esc(claim.debtorName) + ' says they owe you' : esc(claim.creditorName) + ' says ' + (iAmDebtor ? 'you owe' : 'they are owed')}
         </div>
         <div style="font-size:48px;font-weight:500;margin-top:4px;">${fmt(claim.amount)}</div>
         ${claim.status === 'queried'
@@ -1567,14 +1581,13 @@ function renderReqDetail() {
         <div style="font-size:13px;color:var(--text-2);text-align:center;padding:4px 0;">What would you like to do?</div>
         <button class="btn btn-green" style="padding:13px;" onclick="acceptClaim('${claim.id}')">Accept — pay the full ${fmt(claim.amount)}</button>
         <button class="btn btn-amber" style="padding:11px;font-size:13px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='amount';go('q_form')">Propose a different amount</button>
-        <button class="btn btn-grey"  style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject this claim</button>
-      </div>` : ''}
+        <button class="btn btn-grey"  style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject — I don't owe this</button>    </div>` : ''}
 
     ${isIncoming ? `
       <div style="padding:0 16px;display:flex;flex-direction:column;gap:9px;">
         <button class="btn btn-green" style="padding:13px;" onclick="acceptClaim('${claim.id}')">Accept — yes, that's right &#10003;</button>
         <button class="btn btn-amber" style="padding:13px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='choose';go('q_form')">Query / ask a question</button>
-        <button class="btn btn-red"   style="padding:13px;" onclick="startReject('${claim.id}')">Reject this claim</button>
+                <button class="btn btn-red"   style="padding:13px;" onclick="startReject(\'${claim.id}\')">Reject — I don\'t owe this</button>
         <button class="btn btn-ghost" style="padding:10px;font-size:13px;" onclick="skipClaim('${claim.id}')">Skip for now &rarr;</button>
       </div>` : ''}
 
@@ -1610,7 +1623,7 @@ function renderReqDetail() {
           <button class="btn btn-grey"  style="padding:11px;font-size:13px;" onclick="confirmCancel('${claim.id}')">Withdraw this claim</button>`}
       </div>` : ''}
 
-    ${claim.status === 'pending' && iAmCreditor ? `
+    ${claim.status === 'pending' && (iAmCreditor || (claim.type === 'ioowe' && iAmDebtor)) ? `
       <div style="padding:4px 16px 8px;">
         ${A.confirmCancelId === claim.id
           ? `<div style="background:var(--red-50);border-radius:var(--radius-sm);padding:10px;border:0.5px solid rgba(162,45,45,0.2);">
@@ -1634,11 +1647,11 @@ function renderReqDetail() {
             ? "Once you've received the money, mark this as settled."
             : "Once you've paid, tap below. The other person will need to confirm."}
         </p>
-        ${!iAmCreditor ? (
-          A.userDoc?.paymentLink
-            ? `<button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sharePaymentLink('${claim.id}')">&#128178; Send payment via link</button>`
-            : `<div style="font-size:12px;color:var(--text-2);text-align:center;padding:4px 0;">&#128161; <a href="#" onclick="go('settings');return false;" style="color:var(--green-600);">Add a payment link in Settings</a> to send money directly from here.</div>`
-        ) : ''}
+        ${!iAmCreditor ? `
+          ${A.userDoc?.paymentLink ? `<button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sharePaymentLink('${claim.id}')">&#128178; Send payment via link</button>` : ''}
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="showBankDetails('${claim.id}')">&#127984; Pay by bank transfer</button>
+          ${!A.userDoc?.paymentLink ? `<div style="font-size:12px;color:var(--text-2);text-align:center;padding:2px 0;">&#128161; <a href="#" onclick="go('settings');return false;" style="color:var(--green-600);">Add a payment link</a> for even easier payments.</div>` : ''}
+        ` : ''}
         <button class="btn btn-ghost" style="padding:13px;" onclick="markSettled('${claim.id}')">
           ${iAmCreditor ? "I've received this money &#10003;" : "I've paid this &#10003;"}
         </button>
@@ -1825,6 +1838,62 @@ async function dismissRejected(id) {
     });
     go('home');
   } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+async function showBankDetails(claimId) {
+  const all = [...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
+  const claim = all.find(c => c.id === claimId);
+  if (!claim) return;
+
+  // Fetch the creditor's bank details from their user doc
+  // We need to read from users_by_phone or ask the creditor - but we can't read
+  // other users' docs directly. Store bank details on the claim when needed,
+  // or store a 'hasBankDetails' flag and show via a modal system.
+  // Best approach: read creditor's bank details from a readable subcollection
+  // OR: store on the claim when creditor sets them up
+  // For now: if current user IS the creditor, show their own details for sharing
+  // If current user is the debtor, fetch from a bank_details collection
+
+  const iAmDebtor = claim.debtorUid === A.user.uid;
+  const creditorUid = claim.creditorUid;
+
+  // Read creditor's bank details
+  let bankDetails = null;
+  try {
+    const snap = await db.collection('bank_details').doc(creditorUid).get();
+    if (snap.exists) bankDetails = snap.data();
+  } catch(e) {}
+
+  if (!bankDetails) {
+    showModal(
+      esc(claim.creditorName) + ' hasn\'t added bank details yet. You could ask them to add their details in Settings.',
+      [{ label: 'OK', style: 'btn-ghost', action: () => {} }]
+    );
+    return;
+  }
+
+  const amount = fmt(claim.amount);
+  const ref = bankDetails.reference || claim.description || A.userDoc?.displayName || 'payment';
+  const details = `Account name: ${bankDetails.name}\nSort code: ${bankDetails.sortCode}\nAccount number: ${bankDetails.accountNumber}\nReference: ${ref}\nAmount: ${amount}`;
+
+  showModal(
+    `<div style="text-align:left;">
+      <div style="font-size:13px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">${esc(claim.creditorName)}'s bank details</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div><div style="font-size:11px;color:var(--text-3);">Account name</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.name)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-3);">Sort code</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.sortCode)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-3);">Account number</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.accountNumber)}</div></div>
+        ${bankDetails.reference ? `<div><div style="font-size:11px;color:var(--text-3);">Reference</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.reference)}</div></div>` : ''}
+        <div style="margin-top:4px;padding:10px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);"><div style="font-size:11px;color:var(--text-3);">Amount to pay</div><div style="font-size:18px;font-weight:500;color:var(--green-700);">${amount}</div></div>
+      </div>
+    </div>`,
+    [
+      { label: 'Copy details', style: 'btn-green', action: () => {
+        navigator.clipboard?.writeText(details).then(() => showToast('Copied!')).catch(() => showToast('Details shown above — copy manually'));
+      }},
+      { label: 'Done', style: 'btn-ghost', action: () => {} }
+    ]
+  );
 }
 
 function sharePaymentLink(claimId) {
@@ -2518,6 +2587,12 @@ function renderPending() {
       <div style="font-size:17px;font-weight:500;margin-bottom:4px;">Pending</div>
     </div>
     <hr class="divider">
+    ${incoming.length === 0 && outgoing.length === 0 ? `
+      <div style="padding:40px 24px;text-align:center;">
+        <div style="font-size:40px;margin-bottom:14px;">&#10003;</div>
+        <div style="font-size:17px;font-weight:500;margin-bottom:8px;">All caught up!</div>
+        <div style="font-size:13px;color:var(--text-2);line-height:1.7;">Nothing needs your attention right now.</div>
+      </div>` : ''}
     ${incoming.length > 0 ? `
       <div style="padding:10px 16px 6px;">
         <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Needs your response</div>
@@ -2544,7 +2619,9 @@ function renderPending() {
           label = esc(c.creditorName) + ' has answered your question';
           sublabel = 'Tap to read their reply and decide';
         } else {
-          label = esc(c.creditorName) + ' has sent you a request';
+          label = c.type === 'ioowe'
+            ? esc(c.debtorName) + ' has sent you an I Owe You'
+            : esc(c.creditorName) + ' has sent you a request';
           sublabel = 'Tap to accept, query or reject';
         }
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
@@ -2561,13 +2638,15 @@ function renderPending() {
         <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Waiting for response</div>
       </div>
       ${outgoing.map(c => {
+        const isIOU = c.type === 'ioowe';
+        const otherName = isIOU ? c.creditorName : c.debtorName;
         const outLabel = c.status === 'queried' && c.question && !c.counterAmount
           ? (c.answeredQuestion
-              ? esc(c.debtorName) + ' has answered your question'
-              : 'Waiting for ' + esc(c.debtorName) + ' to answer your question')
+              ? esc(otherName) + ' has answered your question'
+              : 'Waiting for ' + esc(otherName) + ' to answer your question')
           : c.status === 'queried' && c.counterAmount
-          ? esc(c.debtorName) + ' has proposed a different amount'
-          : 'Waiting for ' + esc(c.debtorName) + ' to respond';
+          ? esc(otherName) + ' has proposed a different amount'
+          : 'Waiting for ' + esc(otherName) + ' to respond';
         const outSub = c.status === 'queried' && c.answeredQuestion
           ? 'Tap to read their reply'
           : c.status === 'queried' && c.counterAmount
@@ -2668,7 +2747,7 @@ function renderHelp() {
     },
     {
       title: 'Sending an "I Owe You"',
-      body: `The amber circle is for when you want to log a debt you owe to someone else. Maybe a friend paid for your ticket to something and you want to make sure it's recorded. You fill in the same details — who, how much, what for — but unlike a You Owe Me, this one is automatically agreed the moment you send it. There's no back-and-forth; it just appears in both your records straight away. The other person still gets a notification so they know you've logged it.`
+      body: `The amber circle is for when you want to log a debt you owe to someone else. Maybe a friend paid for your ticket to something and you want to make sure it's recorded. You fill in the same details — who, how much, what for — then the other person gets a notification and can accept, query, or reject it, just like a You Owe Me. Once they accept, it appears in both your records as an outstanding debt. You'll see it in your position as money you owe.`
     },
     {
       title: 'Sharing claims via WhatsApp, text or email',
@@ -2700,7 +2779,7 @@ function renderHelp() {
     },
     {
       title: 'Adding connections',
-      body: `Before you can send someone a claim, they need to be in your connections and they need to have signed up to ewe-o-me. Go to Settings and tap "Add connection" to add someone by their phone number or email address. On Android, you can also pick directly from your phone contacts. If the person hasn't signed up yet, you can send them an invite from the connections screen.`
+      body: `You don't need to add someone to your connections before sending a claim. When you tap You Owe Me or I Owe You, just start typing a name in the search box — anyone in your existing connections will appear instantly. If they're not there yet, tap "Add someone new" to find them by phone or email. If they're already on ewe-o-me, they'll be added to your connections automatically. If they're not signed up yet, you can still log the debt and invite them — they'll see it the moment they join. You can also manage all your connections in Settings.`
     },
     {
       title: 'Signing in and your account',
@@ -3049,9 +3128,15 @@ async function proceedNewPerson() {
       const updatedConns = [...filtered, conn];
       await db.collection('users').doc(A.user.uid).update({ connections: updatedConns }).catch(()=>{});
       A.connections = updatedConns;
-      if (statusEl) statusEl.textContent = '';
-      showToast(theirName + ' is on ewe-o-me ✓');
-      go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt');
+      // Show clear confirmation before proceeding
+      if (statusEl) {
+        statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);margin-top:4px;">'
+          + '<div style="font-size:18px;">&#10003;</div>'
+          + '<div><div style="font-size:14px;font-weight:500;color:var(--green-700);">Found ' + esc(theirName) + ' on ewe-o-me</div>'
+          + '<div style="font-size:12px;color:var(--green-600);">They\'ll be notified when you send the claim.</div></div></div>';
+      }
+      // Auto-proceed after brief pause so user sees the confirmation
+      setTimeout(() => go(A.claim.type === 'ioowe' ? 'io_amt' : 'ew_amt'), 1200);
     } else {
       // Not registered
       A.claim.personId     = null;
@@ -3146,6 +3231,39 @@ function renderNamePrompt() {
         <button class="btn btn-green" style="padding:13px;" onclick="saveDisplayName()">Save</button>
       </div>
     </div>`;
+}
+
+async function saveBankDetails() {
+  const name    = document.getElementById('bank-name')?.value.trim() || '';
+  const sortCode = document.getElementById('bank-sort')?.value.trim() || '';
+  const accountNumber = document.getElementById('bank-account')?.value.trim() || '';
+  const reference = document.getElementById('bank-ref')?.value.trim() || '';
+  if (!name || !sortCode || !accountNumber) {
+    showToast('Please enter account name, sort code and account number.'); return;
+  }
+  const bankDetails = { name, sortCode, accountNumber, reference };
+  try {
+    await db.collection('users').doc(A.user.uid).update({ bankDetails });
+    // Also save to readable bank_details collection so debtors can see them
+    await db.collection('bank_details').doc(A.user.uid).set(bankDetails);
+    if (A.userDoc) A.userDoc.bankDetails = bankDetails;
+    showToast('Bank details saved!');
+  } catch(e) { showToast('Could not save. Please try again.'); }
+}
+
+async function clearBankDetails() {
+  showModal('Remove bank details?', [
+    { label: 'Remove', style: 'btn-red', action: async () => {
+      try {
+        await db.collection('users').doc(A.user.uid).update({ bankDetails: null });
+        await db.collection('bank_details').doc(A.user.uid).delete().catch(()=>{});
+        if (A.userDoc) A.userDoc.bankDetails = null;
+        showToast('Bank details removed.');
+        render();
+      } catch(e) { showToast('Could not remove. Please try again.'); }
+    }},
+    { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+  ]);
 }
 
 async function savePaymentLink() {
@@ -3506,6 +3624,16 @@ async function confirmBulkSettle(personId) {
   });
   try {
     await batch.commit();
+    if (outstanding.length > 0) {
+      const sample = outstanding[0];
+      const iAmCred = sample.creditorUid === A.user.uid;
+      const toUid = iAmCred ? personId : sample.creditorUid;
+      sendPushNotification(
+        toUid,
+        (A.userDoc?.displayName||'Someone') + ' marked everything as settled',
+        'Your balance has been cleared — ' + outstanding.length + ' item' + (outstanding.length > 1 ? 's' : '') + ' settled'
+      );
+    }
     go('position');
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
@@ -3538,7 +3666,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.6.7</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.7.4</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3570,6 +3698,18 @@ function renderSettings() {
       <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">Optional. Add your Monzo, PayPal, Revolut or any other payment link here and a "Send payment" button will appear on agreed claims so you can share it easily.</p>
       <input type="url" id="payment-link-input" class="input" placeholder="e.g. https://monzo.me/yourname" value="${esc(A.userDoc?.paymentLink||'')}" style="margin-bottom:8px;"/>
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="savePaymentLink()">Save payment link</button>
+    </div>
+    <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:15px;margin-bottom:6px;">Bank details</div>
+      <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">Optional. Add your UK bank details and people who owe you can see them on agreed claims — makes it easy for them to pay by bank transfer.</p>
+      <input type="text" id="bank-name" class="input" placeholder="Account name (e.g. Sam Clark)" value="${esc(A.userDoc?.bankDetails?.name||'')}" style="margin-bottom:8px;"/>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input type="text" id="bank-sort" class="input" placeholder="Sort code (e.g. 12-34-56)" value="${esc(A.userDoc?.bankDetails?.sortCode||'')}" inputmode="numeric" style="flex:1;"/>
+        <input type="text" id="bank-account" class="input" placeholder="Account number" value="${esc(A.userDoc?.bankDetails?.accountNumber||'')}" inputmode="numeric" style="flex:1;"/>
+      </div>
+      <input type="text" id="bank-ref" class="input" placeholder="Payment reference note (optional, e.g. use your name)" value="${esc(A.userDoc?.bankDetails?.reference||'')}" style="margin-bottom:8px;"/>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="saveBankDetails()">Save bank details</button>
+      ${A.userDoc?.bankDetails?.accountNumber ? '<button class="btn btn-grey" style="font-size:13px;padding:9px;margin-top:6px;" onclick="clearBankDetails()">Remove bank details</button>' : ''}
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:6px;">Notes</div>
@@ -3982,7 +4122,10 @@ function subscribeToData(uid) {
 
       // Incoming & needs my action (including rejected claims the creditor hasn't dismissed)
       A.pendingClaims = all.filter(c => c.status !== 'cancelled' && (
-        (c.status === 'pending'             && c.debtorUid   === uid) ||
+        // YOM: debtor needs to action
+        (c.status === 'pending'             && c.debtorUid   === uid && c.type !== 'ioowe') ||
+        // IOU: creditor needs to action (they received the IOU)
+        (c.status === 'pending'             && c.creditorUid === uid && c.type === 'ioowe') ||
         (c.status === 'queried'             && c.creditorUid === uid) ||
         (c.status === 'queried'             && c.debtorUid   === uid && c.answeredQuestion) ||
         (c.status === 'evidence_requested'  && c.creditorUid === uid) ||
@@ -3994,7 +4137,10 @@ function subscribeToData(uid) {
       // Outgoing awaiting response
       A.sentClaims = all.filter(c =>
         c.status !== 'cancelled' && (
-        (c.status === 'pending'           && c.creditorUid === uid) ||
+        // YOM creditor waiting for debtor response
+        (c.status === 'pending'           && c.creditorUid === uid && c.type !== 'ioowe') ||
+        // IOU debtor waiting for creditor response (they sent it)
+        (c.status === 'pending'           && c.debtorUid   === uid && c.type === 'ioowe') ||
         (c.status === 'queried'           && c.debtorUid   === uid && !c.answeredQuestion) ||
         (c.status === 'settlement_pending' && c.debtorUid  === uid)
         )
