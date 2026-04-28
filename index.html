@@ -2644,6 +2644,11 @@ function renderPending() {
         } else if (c.status === 'queried' && c.answeredQuestion && !iAmCr) {
           label = esc(c.creditorName) + ' has answered your question';
           sublabel = 'Tap to read their reply and decide';
+        } else if (c.status === 'queried' && c.question && !c.answeredQuestion && !iAmCr) {
+          // Debtor asked question, waiting for creditor to reply
+          // This shouldn't normally show in incoming but just in case
+          label = 'Waiting for ' + esc(c.creditorName) + ' to answer your question';
+          sublabel = 'Tap to view';
         } else {
           label = c.type === 'ioowe'
             ? esc(c.debtorName) + ' has sent you an I Owe You'
@@ -2665,13 +2670,20 @@ function renderPending() {
       </div>
       ${outgoing.map(c => {
         const isIOU = c.type === 'ioowe';
+        // For outgoing: 'other' is who we're waiting on
+        // For YOM sent by creditor: waiting on debtor → debtorName
+        // For IOU sent by debtor: waiting on creditor → creditorName  
+        // For question sent by debtor: waiting on creditor to answer → creditorName
+        const waitingOn = c.status === 'queried' && c.question
+          ? c.creditorName  // always waiting on creditor to answer question
+          : isIOU ? c.creditorName : c.debtorName;
         const otherName = isIOU ? c.creditorName : c.debtorName;
         const outLabel = c.status === 'queried' && c.question && !c.counterAmount
           ? (c.answeredQuestion
-              ? esc(otherName) + ' has answered your question'
-              : 'Waiting for ' + esc(otherName) + ' to answer your question')
+              ? esc(waitingOn) + ' has answered your question'
+              : 'Waiting for ' + esc(waitingOn) + ' to answer your question')
           : c.status === 'queried' && c.counterAmount
-          ? esc(otherName) + ' has proposed a different amount'
+          ? 'Waiting for ' + esc(c.creditorName) + ' to respond to your counter-offer'
           : 'Waiting for ' + esc(otherName) + ' to respond';
         const outSub = c.status === 'queried' && c.answeredQuestion
           ? 'Tap to read their reply'
@@ -3692,7 +3704,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.7.5</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.7.7</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
