@@ -1640,8 +1640,8 @@ function renderReqDetail() {
           <div id="answer-wrap" style="display:flex;flex-direction:column;gap:8px;">
             <textarea id="q-answer" class="input" rows="3" placeholder="Type your reply here…" style="resize:none;"></textarea>
             <button class="btn btn-green" style="padding:12px;" onclick="answerQuestion('${claim.id}')">Send reply</button>
-            <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="acceptClaim('${claim.id}')">Accept the original amount anyway</button>
-            <button class="btn btn-grey" style="padding:11px;font-size:13px;" onclick="startReject('${claim.id}')">Reject — I don't owe this</button>
+            <button class="btn btn-grey" style="padding:11px;font-size:13px;" onclick="confirmCancel('${claim.id}')">Withdraw this claim</button>
+            <div style="padding:8px 0 2px;font-size:12px;color:var(--text-3);">Reply to their question — they decide whether to accept once you've answered.</div>
           </div>` : `
           <div style="font-size:12px;color:var(--text-2);text-align:center;padding:4px 0;">Accept their counter-offer, or counter back:</div>
           <button class="btn btn-green" style="padding:13px;" onclick="acceptCounter('${claim.id}',${claim.counterAmount})">Accept their ${fmt(claim.counterAmount)}</button>
@@ -1748,6 +1748,16 @@ function goNextPending() {
 
 async function acceptClaim(id) {
   const cl = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===id);
+  // Guard: only the right party can accept
+  if (cl) {
+    const isIOU = cl.type === 'ioowe';
+    const shouldBeDebtor = !isIOU; // YOM: debtor accepts; IOU: creditor accepts
+    const callerIsDebtor = cl.debtorUid === A.user?.uid;
+    const callerIsCreditor = cl.creditorUid === A.user?.uid;
+    if (shouldBeDebtor && !callerIsDebtor && !callerIsCreditor) {
+      console.warn('acceptClaim: wrong role'); return;
+    }
+  }
   try {
     await db.collection('claims').doc(id).update({
       status:    'agreed',
@@ -2078,6 +2088,8 @@ async function sendQuery() {
       status:         'queried',
       counterAmount:  parseFloat(amount),
       counterComment: note || null,
+      question:       null,
+      answeredQuestion: null,
       updatedAt:      firebase.firestore.FieldValue.serverTimestamp()
     });
     const qClaim = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===A.selectedClaimId);
@@ -3271,6 +3283,69 @@ function renderNamePrompt() {
     </div>`;
 }
 
+function exportMyData() {
+  const uid = A.user?.uid;
+  const name = A.userDoc?.displayName || A.user?.displayName || 'Me';
+  const now = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+  const allClaims = [...A.ledger, ...A.settled, ...A.pendingClaims, ...A.sentClaims]
+    .filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i) // deduplicate
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+  const statusLabel = s => ({
+    pending: 'Pending', queried: 'Queried', agreed: 'Agreed',
+    settlement_pending: 'Payment claimed', settled: 'Settled',
+    rejected: 'Rejected', cancelled: 'Cancelled'
+  })[s] || s;
+
+  const lines = [
+    'ewe-o-me — Personal data export',
+    'User: ' + name,
+    'Exported: ' + now,
+    '='.repeat(50),
+    '',
+    'OUTSTANDING BALANCE',
+    '-'.repeat(30),
+  ];
+
+  // Balance summary
+  const owedToMe = A.ledger.filter(c => c.creditorUid === uid).reduce((s,c) => s+c.amount, 0);
+  const iOwe = A.ledger.filter(c => c.debtorUid === uid).reduce((s,c) => s+c.amount, 0);
+  lines.push('Owed to me: ' + fmt(owedToMe));
+  lines.push('I owe:      ' + fmt(iOwe));
+  lines.push('Net:        ' + (owedToMe - iOwe >= 0 ? '+' : '') + fmt(owedToMe - iOwe));
+  lines.push('');
+
+  // All claims
+  lines.push('ALL CLAIMS (' + allClaims.length + ' total)');
+  lines.push('-'.repeat(30));
+  allClaims.forEach(c => {
+    const iCr = c.creditorUid === uid;
+    const role = iCr ? 'OWED TO ME' : 'I OWE';
+    const other = iCr ? c.debtorName : c.creditorName;
+    lines.push('');
+    lines.push(role + ' — ' + other);
+    lines.push('  Amount:  ' + fmt(c.amount));
+    lines.push('  For:     ' + (c.description || 'No description'));
+    lines.push('  Date:    ' + (c.date ? fmtDate(c.date) : 'Unknown'));
+    lines.push('  Status:  ' + statusLabel(c.status));
+    if (c.rejectionNote) lines.push('  Note:    ' + c.rejectionNote);
+  });
+
+  lines.push('');
+  lines.push('='.repeat(50));
+  lines.push('End of export');
+
+  const text = lines.join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'eweome-export-' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Data exported!');
+}
+
 async function saveBankDetails() {
   const name    = document.getElementById('bank-name')?.value.trim() || '';
   const sortCode = document.getElementById('bank-sort')?.value.trim() || '';
@@ -3704,7 +3779,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.7.7</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.0</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -3736,6 +3811,11 @@ function renderSettings() {
       <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">Optional. Add your Monzo, PayPal, Revolut or any other payment link here and a "Send payment" button will appear on agreed claims so you can share it easily.</p>
       <input type="url" id="payment-link-input" class="input" placeholder="e.g. https://monzo.me/yourname" value="${esc(A.userDoc?.paymentLink||'')}" style="margin-bottom:8px;"/>
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="savePaymentLink()">Save payment link</button>
+    </div>
+    <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:15px;margin-bottom:6px;">Export my data</div>
+      <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">Download a plain-text summary of all your claims — useful as a personal record or backup.</p>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="exportMyData()">&#128229; Download my data</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:6px;">Bank details</div>
