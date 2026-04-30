@@ -669,6 +669,8 @@ const A = {
   searchQuery: '',
   notes: [],
   _editNoteId: null,
+  groups: [],
+  selectedGroupId: null,
   welcomeSeen: false,
   _helpOpen: {}
 };
@@ -822,7 +824,7 @@ function googleIcon() {
 function go(screen) {
   A.screen = screen;
   // Save stable screens for refresh restore
-  const restorable = ['home','position','pending','all_connections','notes','help'];
+  const restorable = ['home','position','pending','all_connections','notes','help','groups'];
   if (restorable.includes(screen)) {
     try { localStorage.setItem('eweome_last_screen', screen); } catch(e) {}
   }
@@ -881,6 +883,10 @@ function render() {
     pending:    renderPending,
     onboarding:     renderOnboarding,
     find_friends:   renderFindFriends,
+    groups:         renderGroups,
+    group_detail:   renderGroupDetail,
+    group_new:      renderGroupNew,
+    group_expense:  renderGroupExpense,
     all_connections: renderAllConnections,
     search:          renderSearch,
     notes:           renderNotes,
@@ -939,12 +945,14 @@ function render() {
         </svg>
         Pending
       </button>
-      <button class="nav-item ${A.screen === 'settings' ? 'active' : ''}" onclick="go('settings')">
+      <button class="nav-item ${['groups','group_detail','group_new','group_expense'].includes(A.screen) ? 'active' : ''}" onclick="go('groups')">
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
-        Settings
+        Groups
       </button>
     </nav>`;
   restoreFocus();
@@ -1024,7 +1032,15 @@ function renderHome() {
       <div style="flex:1;text-align:center;">
         <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
       </div>
-      <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+        <button onclick="go('settings')" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text-2);" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </button>
+        <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;">Log it.<br>Track it.<br>Settle it.</div>
+      </div>
     </div>
     ${showNotifPrompt ? `
       <div style="margin:0 16px 4px;padding:11px 13px;background:#F0F4FF;border-radius:var(--radius-sm);border:0.5px solid #C0CCEE;display:flex;align-items:flex-start;gap:10px;">
@@ -3605,6 +3621,420 @@ async function addFriendFromScan(idx) {
   }
 }
 
+
+/* ================================================================
+   GROUPS
+================================================================ */
+
+function renderGroups() {
+  const groups = A.groups || [];
+  const rows = groups.map(g => {
+    const myShare = computeMyGroupBalance(g);
+    const bal = myShare.net;
+    const balStr = bal === 0 ? 'All square' : (bal > 0 ? 'Owed ' + fmt(bal) : 'Owe ' + fmt(Math.abs(bal)));
+    const balColor = bal > 0 ? 'var(--green-600)' : bal < 0 ? 'var(--red-600)' : 'var(--text-2)';
+    return '<div class="list-item" onclick="A.selectedGroupId=\'' + g.id + '\';go(\'group_detail\')">'
+      + '<div class="avatar" style="background:var(--green-50);color:var(--green-600);font-size:16px;">&#128101;</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-size:15px;font-weight:500;">' + esc(g.name) + '</div>'
+      + '<div style="font-size:12px;color:var(--text-2);">' + (g.memberUids||[]).length + ' members · ' + (g.expenses||[]).length + ' expenses</div>'
+      + '</div>'
+      + '<div style="font-size:13px;font-weight:500;color:' + balColor + ';">' + balStr + '</div>'
+      + '</div>';
+  }).join('');
+
+  return `
+    ${hdr('Groups', null, null, null)}
+    ${groups.length === 0 ? `
+      <div style="padding:40px 24px;text-align:center;">
+        <div style="font-size:40px;margin-bottom:14px;">&#128101;</div>
+        <div style="font-size:17px;font-weight:500;margin-bottom:8px;">No groups yet</div>
+        <div style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:20px;">Groups are great for trips, shared houses or any time several people are splitting costs.</div>
+        <button class="btn btn-green" style="padding:12px 20px;" onclick="go('group_new')">Create a group</button>
+      </div>` : `
+      <div style="padding:12px 16px 4px;display:flex;justify-content:flex-end;">
+        <button class="btn btn-ghost" style="width:auto;padding:8px 14px;font-size:13px;" onclick="go('group_new')">+ New group</button>
+      </div>
+      ${rows}`}`;
+}
+
+function computeMyGroupBalance(group) {
+  const uid = A.user?.uid;
+  const expenses = group.expenses || [];
+  let owed = 0, owes = 0;
+  expenses.forEach(e => {
+    const split = computeSplits(e, group.memberUids || []);
+    if (e.paidByUid === uid) {
+      // I paid — others owe me their share
+      split.forEach((amt, memberUid) => {
+        if (memberUid !== uid) owed += amt;
+      });
+    } else {
+      // Someone else paid — I owe my share
+      const myShare = split.get(uid) || 0;
+      owes += myShare;
+    }
+  });
+  return { owed, owes, net: owed - owes };
+}
+
+function computeSplits(expense, memberUids) {
+  const map = new Map();
+  if (expense.splitType === 'equal') {
+    const included = expense.includedUids || memberUids;
+    const share = expense.amount / included.length;
+    included.forEach(uid => map.set(uid, Math.round(share * 100) / 100));
+  } else if (expense.splitType === 'custom') {
+    (expense.customSplits || []).forEach(s => map.set(s.uid, s.amount));
+  }
+  return map;
+}
+
+function renderGroupDetail() {
+  const group = (A.groups || []).find(g => g.id === A.selectedGroupId);
+  if (!group) return '<div class="empty">Group not found.</div>';
+  const uid = A.user?.uid;
+  const expenses = (group.expenses || []).slice().reverse(); // newest first
+  const members = group.memberUids || [];
+
+  // Compute net balances between all members
+  const balances = computeGroupBalances(group);
+
+  const expenseRows = expenses.map(e => {
+    const paidByName = e.paidByUid === uid ? 'You' : (e.paidByName || 'Someone');
+    const splits = computeSplits(e, members);
+    const myShare = splits.get(uid) || 0;
+    return '<div style="padding:12px 16px;border-bottom:0.5px solid var(--border);">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">'
+      + '<span style="font-size:14px;font-weight:500;">' + esc(e.description) + '</span>'
+      + '<span style="font-size:14px;font-weight:500;">' + fmt(e.amount) + '</span>'
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--text-2);">' + paidByName + ' paid'
+      + (myShare > 0 && e.paidByUid !== uid ? ' · your share: ' + fmt(myShare) : '')
+      + (e.paidByUid === uid ? ' · you paid' : '')
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  // Net positions within group
+  const myBal = computeMyGroupBalance(group);
+  const positionText = myBal.net === 0 ? 'You\'re all square in this group' 
+    : myBal.net > 0 ? 'Overall you\'re owed ' + fmt(myBal.net) + ' in this group'
+    : 'Overall you owe ' + fmt(Math.abs(myBal.net)) + ' in this group';
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('groups')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">${esc(group.name)}</span>
+      <button onclick="go('group_expense')" style="background:none;border:none;font-size:22px;color:var(--green-600);cursor:pointer;padding:4px 8px;">+</button>
+    </div>
+    <div style="padding:12px 16px;background:var(--green-50);border-bottom:0.5px solid var(--green-100);">
+      <div style="font-size:13px;color:var(--green-700);">${positionText}</div>
+    </div>
+    ${expenses.length === 0 ? `
+      <div style="padding:32px 24px;text-align:center;">
+        <div style="font-size:13px;color:var(--text-2);line-height:1.7;">No expenses yet. Tap + to add one.</div>
+      </div>` : expenseRows}
+    <div style="padding:16px;">
+      <button class="btn btn-green" style="padding:13px;" onclick="previewSettleUp('${group.id}')">&#9889; Settle up</button>
+    </div>`;
+}
+
+function computeGroupBalances(group) {
+  const uid = A.user?.uid;
+  const members = group.memberUids || [];
+  const net = {}; // net[uid] = how much they are owed (positive) or owe (negative)
+  members.forEach(m => net[m] = 0);
+  
+  (group.expenses || []).forEach(e => {
+    const splits = computeSplits(e, members);
+    splits.forEach((amt, memberUid) => {
+      if (memberUid !== e.paidByUid) {
+        net[e.paidByUid] = (net[e.paidByUid] || 0) + amt;
+        net[memberUid]    = (net[memberUid]    || 0) - amt;
+      }
+    });
+  });
+  return net;
+}
+
+async function previewSettleUp(groupId) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const uid = A.user?.uid;
+  const balances = computeGroupBalances(group);
+
+  // Generate minimal transfers
+  const transfers = minimizeCashFlow(balances, group);
+  if (transfers.length === 0) {
+    showModal('Everyone is already square — nothing to settle!', [{ label: 'Great!', style: 'btn-green', action: () => {} }]);
+    return;
+  }
+
+  const myTransfers = transfers.filter(t => t.from === uid || t.to === uid);
+  if (myTransfers.length === 0) {
+    showModal('You\'re already square with everyone in this group.', [{ label: 'OK', style: 'btn-ghost', action: () => {} }]);
+    return;
+  }
+
+  const lines = myTransfers.map(t => {
+    const fromName = t.from === uid ? 'You' : t.fromName;
+    const toName = t.to === uid ? 'you' : t.toName;
+    return fromName + ' pay ' + toName + ' ' + fmt(t.amount);
+  }).join('\n');
+
+  showModal(
+    '<div><div style="font-size:14px;font-weight:500;margin-bottom:10px;">Settle up preview</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.8;">' + lines.replace(/\n/g,'<br>') + '</div>'
+    + '<div style="font-size:12px;color:var(--text-3);margin-top:10px;">This will create claims between all members to record these payments.</div></div>',
+    [
+      { label: 'Create claims', style: 'btn-green', action: () => executeSettleUp(groupId, transfers) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]
+  );
+}
+
+function minimizeCashFlow(balances, group) {
+  const uid = A.user?.uid;
+  const memberNames = {};
+  (A.connections || []).forEach(c => { if (c.uid || c.id) memberNames[c.uid || c.id] = c.name; });
+  memberNames[uid] = A.userDoc?.displayName || 'Me';
+
+  const creditors = [], debtors = [];
+  Object.entries(balances).forEach(([id, bal]) => {
+    if (bal > 0.01) creditors.push({ id, bal, name: memberNames[id] || 'Unknown' });
+    else if (bal < -0.01) debtors.push({ id, bal: -bal, name: memberNames[id] || 'Unknown' });
+  });
+
+  const transfers = [];
+  let i = 0, j = 0;
+  const cr = creditors.map(c => ({ ...c }));
+  const de = debtors.map(d => ({ ...d }));
+  while (i < cr.length && j < de.length) {
+    const amt = Math.min(cr[i].bal, de[j].bal);
+    if (amt > 0.01) {
+      transfers.push({ from: de[j].id, fromName: de[j].name, to: cr[i].id, toName: cr[i].name, amount: Math.round(amt * 100) / 100 });
+    }
+    cr[i].bal -= amt; de[j].bal -= amt;
+    if (cr[i].bal < 0.01) i++;
+    if (de[j].bal < 0.01) j++;
+  }
+  return transfers;
+}
+
+async function executeSettleUp(groupId, transfers) {
+  const uid = A.user?.uid;
+  const myName = A.userDoc?.displayName || 'Someone';
+  const today = new Date().toISOString().split('T')[0];
+  const group = (A.groups || []).find(g => g.id === groupId);
+  const groupName = group?.name || 'group';
+
+  for (const t of transfers) {
+    // Only create claims involving the current user
+    if (t.from !== uid && t.to !== uid) continue;
+    try {
+      await db.collection('claims').add({
+        creditorUid:  t.to,
+        creditorName: t.to === uid ? myName : t.toName,
+        debtorUid:    t.from,
+        debtorName:   t.from === uid ? myName : t.fromName,
+        amount:       t.amount,
+        description:  'Settle up: ' + groupName,
+        status:       'pending',
+        type:         'eweome',
+        participants: [t.to, t.from],
+        date:         today,
+        groupId:      groupId,
+        createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+      });
+      if (t.to !== uid) sendPushNotification(t.to, myName + ' has sent a settle-up claim', fmt(t.amount) + ' for ' + groupName);
+      if (t.from !== uid) sendPushNotification(t.from, myName + ' has sent a settle-up claim', fmt(t.amount) + ' for ' + groupName);
+    } catch(e) { console.error('executeSettleUp error:', e); }
+  }
+  showToast('Claims created — check your Pending tab!');
+  go('pending');
+}
+
+function renderGroupNew() {
+  const conns = [...(A.connections||[])].sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const selected = A._newGroupMembers || [];
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('groups')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">New group</span>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label class="field-label">Group name</label>
+        <input type="text" id="group-name" class="input" placeholder="e.g. Prague Trip, Flat 4B" autocomplete="off"/>
+      </div>
+      <div>
+        <label class="field-label">Members</label>
+        <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">You're automatically included. Pick everyone else:</div>
+        ${conns.map(c => {
+          const isSel = selected.some(s => s === (c.uid||c.id));
+          return '<div class="list-item" style="' + (isSel ? 'background:var(--green-50);' : '') + '" onclick="toggleGroupMember(\'' + (c.uid||c.id) + '\',\'' + esc(c.name) + '\')">'
+            + '<div class="avatar ' + (c.color||'') + '">' + initials(c.name) + '</div>'
+            + '<div style="flex:1;">' + esc(c.name) + '</div>'
+            + '<div style="font-size:20px;color:' + (isSel ? 'var(--green-600)' : 'var(--text-3)') + ';">' + (isSel ? '&#10003;' : '&#43;') + '</div>'
+            + '</div>';
+        }).join('')}
+      </div>
+      ${selected.length > 0 ? '<div style="font-size:13px;color:var(--green-600);">' + (selected.length + 1) + ' members selected (including you)</div>' : ''}
+      <button class="btn btn-green" style="padding:13px;" onclick="createGroup()">Create group</button>
+    </div>`;
+}
+
+function toggleGroupMember(uid, name) {
+  if (!A._newGroupMembers) A._newGroupMembers = [];
+  const idx = A._newGroupMembers.indexOf(uid);
+  if (idx >= 0) A._newGroupMembers.splice(idx, 1);
+  else A._newGroupMembers.push(uid);
+  render();
+}
+
+async function createGroup() {
+  const name = document.getElementById('group-name')?.value.trim();
+  if (!name) { showToast('Please enter a group name.'); return; }
+  const members = A._newGroupMembers || [];
+  if (members.length === 0) { showToast('Please add at least one other member.'); return; }
+  const uid = A.user?.uid;
+  const myName = A.userDoc?.displayName || 'Me';
+  const memberNames = { [uid]: myName };
+  (A.connections||[]).forEach(c => { memberNames[c.uid||c.id] = c.name; });
+
+  try {
+    const ref = await db.collection('groups').add({
+      name,
+      memberUids:   [uid, ...members],
+      memberNames:  memberNames,
+      createdBy:    uid,
+      expenses:     [],
+      createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+    });
+    // Notify members
+    members.forEach(m => sendPushNotification(m, myName + ' added you to a group', name));
+    A._newGroupMembers = [];
+    A.selectedGroupId = ref.id;
+    go('group_detail');
+  } catch(e) { showToast('Could not create group. Please try again.'); }
+}
+
+function renderGroupExpense() {
+  const group = (A.groups || []).find(g => g.id === A.selectedGroupId);
+  if (!group) return '<div class="empty">Group not found.</div>';
+  const uid = A.user?.uid;
+  const members = group.memberUids || [];
+  const memberNames = group.memberNames || {};
+  const splitType = A._expenseSplit || 'equal';
+  const includedUids = A._expenseIncluded || members;
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('group_detail')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Add expense</span>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label class="field-label">What was it for?</label>
+        <input type="text" id="exp-desc" class="input" placeholder="e.g. Dinner at La Cueva" autocomplete="off"/>
+      </div>
+      <div>
+        <label class="field-label">Total amount</label>
+        <input type="number" id="exp-amount" class="input" placeholder="0.00" inputmode="decimal" step="0.01" min="0"/>
+      </div>
+      <div>
+        <label class="field-label">Who paid?</label>
+        <select id="exp-paidby" class="input" style="background:var(--surface);">
+          ${members.map(m => '<option value="' + m + '"' + (m === uid ? ' selected' : '') + '>' + esc(memberNames[m] || m) + '</option>').join('')}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Split</label>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button class="btn ${splitType === 'equal' ? 'btn-green' : 'btn-ghost'}" style="flex:1;padding:9px;font-size:13px;" onclick="A._expenseSplit='equal';render()">Equal</button>
+          <button class="btn ${splitType === 'custom' ? 'btn-green' : 'btn-ghost'}" style="flex:1;padding:9px;font-size:13px;" onclick="A._expenseSplit='custom';render()">Custom</button>
+        </div>
+        ${splitType === 'equal' ? `
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:6px;">Who's included?</div>
+          ${members.map(m => {
+            const inc = includedUids.includes(m);
+            return '<div class="list-item" style="padding:8px 0;' + (inc ? 'background:none;' : '') + '" onclick="toggleExpenseMember(\'' + m + '\')">'
+              + '<div class="avatar" style="width:28px;height:28px;font-size:11px;">' + initials(memberNames[m]||'?') + '</div>'
+              + '<div style="flex:1;font-size:13px;">' + esc(memberNames[m] || m) + '</div>'
+              + '<div style="font-size:18px;color:' + (inc ? 'var(--green-600)' : 'var(--text-3)') + ';">' + (inc ? '&#10003;' : '&#9675;') + '</div>'
+              + '</div>';
+          }).join('')}` : `
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:6px;">Enter each person's share:</div>
+          ${members.map(m => '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+            + '<div style="flex:1;font-size:13px;">' + esc(memberNames[m]||m) + '</div>'
+            + '<input type="number" id="custom-' + m + '" class="input" placeholder="0.00" inputmode="decimal" step="0.01" min="0" style="width:90px;margin:0;padding:8px;"/>'
+            + '</div>').join('')}`}
+      </div>
+      <button class="btn btn-green" style="padding:13px;" onclick="addGroupExpense()">Add expense</button>
+    </div>`;
+}
+
+function toggleExpenseMember(uid) {
+  if (!A._expenseIncluded) A._expenseIncluded = (A.groups||[]).find(g=>g.id===A.selectedGroupId)?.memberUids || [];
+  const idx = A._expenseIncluded.indexOf(uid);
+  if (idx >= 0 && A._expenseIncluded.length > 2) A._expenseIncluded.splice(idx, 1);
+  else if (idx < 0) A._expenseIncluded.push(uid);
+  render();
+}
+
+async function addGroupExpense() {
+  const desc = document.getElementById('exp-desc')?.value.trim();
+  const amount = parseFloat(document.getElementById('exp-amount')?.value);
+  const paidByUid = document.getElementById('exp-paidby')?.value;
+  const group = (A.groups||[]).find(g => g.id === A.selectedGroupId);
+  if (!desc) { showToast('Please enter a description.'); return; }
+  if (!amount || amount <= 0) { showToast('Please enter an amount.'); return; }
+  if (!group) return;
+
+  const splitType = A._expenseSplit || 'equal';
+  const memberNames = group.memberNames || {};
+  let customSplits = null;
+
+  if (splitType === 'custom') {
+    customSplits = (group.memberUids||[]).map(m => ({
+      uid: m,
+      amount: parseFloat(document.getElementById('custom-' + m)?.value || '0') || 0
+    })).filter(s => s.amount > 0);
+    const total = customSplits.reduce((s,c) => s+c.amount, 0);
+    if (Math.abs(total - amount) > 0.02) {
+      showToast('Custom splits must add up to ' + fmt(amount)); return;
+    }
+  }
+
+  const expense = {
+    id: Date.now().toString(),
+    description: desc,
+    amount,
+    paidByUid,
+    paidByName: memberNames[paidByUid] || paidByUid,
+    splitType,
+    includedUids: splitType === 'equal' ? (A._expenseIncluded || group.memberUids) : null,
+    customSplits,
+    addedByUid: A.user?.uid,
+    addedAt: new Date().toISOString()
+  };
+
+  try {
+    await db.collection('groups').doc(A.selectedGroupId).update({
+      expenses: firebase.firestore.FieldValue.arrayUnion(expense),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    A._expenseSplit = 'equal';
+    A._expenseIncluded = null;
+    showToast('Expense added!');
+    go('group_detail');
+  } catch(e) { showToast('Could not add expense. Please try again.'); }
+}
+
 /* ================================================================
    MERGE ACCOUNTS
 ================================================================ */
@@ -3779,7 +4209,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.0</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.1</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -4167,6 +4597,15 @@ function subscribeToData(uid) {
   A._unsubs.forEach(fn => fn());
   A._unsubs = [];
 
+  // Groups
+  const g1 = db.collection('groups')
+    .where('memberUids', 'array-contains', uid)
+    .onSnapshot(snap => {
+      A.groups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (!['loading','signin'].includes(A.screen)) render();
+    }, () => {});
+  A._unsubs.push(g1);
+
   // User doc (connections)
   const u1 = db.collection('users').doc(uid)
     .onSnapshot(snap => {
@@ -4302,7 +4741,7 @@ auth.onAuthStateChanged(async fbUser => {
     else if (A.needsOnboarding) go('onboarding');
     else if (!A.welcomeSeen && !localStorage.getItem('eweome_welcome_seen')) go('welcome');
     else {
-      const restorable = ['home','position','pending','all_connections','notes','help'];
+      const restorable = ['home','position','pending','all_connections','notes','help','groups'];
       const last = localStorage.getItem('eweome_last_screen');
       go(last && restorable.includes(last) ? last : 'home');
     }
