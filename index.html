@@ -1027,20 +1027,18 @@ function renderHome() {
     && Notification.permission === 'default' 
     && !sessionStorage.getItem('notif_prompt_dismissed');
   return `
-    <div style="padding:14px 16px 8px;display:flex;align-items:center;gap:12px;">
+    <div style="padding:14px 16px 8px;display:flex;align-items:center;gap:12px;position:relative;">
+      <button onclick="go('settings')" style="position:absolute;top:8px;right:12px;background:none;border:none;cursor:pointer;padding:4px;color:var(--text-2);" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
       ${sheepSvg(52)}
       <div style="flex:1;text-align:center;">
         <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--green-600);letter-spacing:0.01em;line-height:1;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
-        <button onclick="go('settings')" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text-2);" aria-label="Settings">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-          </svg>
-        </button>
-        <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;">Log it.<br>Track it.<br>Settle it.</div>
-      </div>
+      <div style="font-size:11px;color:var(--text-2);line-height:1.5;text-align:right;flex-shrink:0;">Log it.<br>Track it.<br>Settle it.</div>
     </div>
     ${showNotifPrompt ? `
       <div style="margin:0 16px 4px;padding:11px 13px;background:#F0F4FF;border-radius:var(--radius-sm);border:0.5px solid #C0CCEE;display:flex;align-items:flex-start;gap:10px;">
@@ -2294,7 +2292,7 @@ function renderPosition() {
     <div style="padding:14px 16px 4px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
       <div style="font-size:17px;font-weight:500;">My position</div>
       <div style="display:flex;align-items:center;gap:8px;">
-        ${A.ledger.length > 0 ? `<button class="btn btn-ghost" style="width:auto;padding:7px 14px;font-size:13px;" onclick="go('simplify')">Simplify debts</button>` : ""}
+        
       </div>
     </div>
       <div class="balance-grid">
@@ -4209,7 +4207,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.1</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.3</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
