@@ -622,6 +622,31 @@ if (messaging) {
 }
 
 /* ================================================================
+   WHAT'S NEW — version changelog
+   Only add an entry when there's something worth telling users about.
+   Patch fixes and minor tweaks don't need an entry.
+   Versions are shown newest-first. Users see any versions newer than
+   the last version they opened the app on.
+================================================================ */
+const WHATS_NEW = {
+  'v1.8.5': {
+    title: 'Activity digest & group management',
+    features: [
+      { icon: '&#128276;', heading: 'Activity digest', body: 'When you open the app, you\'ll now see a summary of everything that happened since you were last here — no more missing a second notification because you only spotted the first.' },
+      { icon: '&#128465;', heading: 'Delete or close groups', body: 'Group creators can now delete a group. If it has outstanding balances, you can choose to settle up first — which creates the right pending claims between all members — or just delete it outright.' }
+    ]
+  },
+  'v1.8.1': {
+    title: 'Groups',
+    features: [
+      { icon: '&#128101;', heading: 'Groups', body: 'Split costs across a group of people — great for trips, shared houses, or anything where several people are chipping in. Add a group from the Groups tab, log expenses as you go, and use Settle Up when you\'re done to automatically create the right claims between everyone.' }
+    ]
+  }
+};
+
+const APP_VERSION = 'v1.8.5';
+
+/* ================================================================
    APP STATE
 ================================================================ */
 const A = {
@@ -672,7 +697,9 @@ const A = {
   groups: [],
   selectedGroupId: null,
   welcomeSeen: false,
-  _helpOpen: {}
+  _helpOpen: {},
+  activityDigest: [],
+  _activityChecked: false
 };
 
 /* ================================================================
@@ -852,7 +879,7 @@ function render() {
   const selEnd = document.activeElement?.selectionEnd;
 
   const app = document.getElementById('app');
-  const showNav = !['loading','signin','welcome'].includes(A.screen);
+  const showNav = !['loading','signin','welcome','activity_digest','whats_new'].includes(A.screen);
   const pendingCount = A.pendingClaims.length;
 
   const content = {
@@ -893,6 +920,8 @@ function render() {
     new_note:        renderNewNote,
     edit_note:       renderEditNote,
     welcome:         renderWelcome,
+    whats_new:       renderWhatsNew,
+    activity_digest: renderActivityDigest,
     name_prompt:     renderNamePrompt,
     unregistered_claim: renderUnregisteredClaim,
     new_person_claim:    renderNewPersonClaim,
@@ -2789,12 +2818,126 @@ function renderWelcome() {
 function dismissWelcome(goToHelp) {
   A.welcomeSeen = true;
   localStorage.setItem('eweome_welcome_seen', '1');
+  // Also mark current version as seen so What's New doesn't immediately appear
+  localStorage.setItem('eweome_last_seen_version', APP_VERSION);
   go(goToHelp ? 'help' : 'home');
 }
 
 /* ================================================================
-   HELP SCREEN
+   WHAT'S NEW SCREEN
 ================================================================ */
+function hasNewFeaturesToShow() {
+  const lastSeen = localStorage.getItem('eweome_last_seen_version');
+  if (!lastSeen) return false; // brand new user — they get the welcome screen instead
+  if (lastSeen === APP_VERSION) return false;
+  // Check if any version in WHATS_NEW is newer than lastSeen
+  return versionsNewerThan(lastSeen).length > 0;
+}
+
+function versionsNewerThan(lastSeen) {
+  // Version strings are like 'v1.8.1' — parse and compare numerically
+  function vNum(v) {
+    return (v || '').replace('v','').split('.').map(Number);
+  }
+  function isNewer(a, b) {
+    const an = vNum(a), bn = vNum(b);
+    for (let i = 0; i < 3; i++) {
+      if ((an[i]||0) > (bn[i]||0)) return true;
+      if ((an[i]||0) < (bn[i]||0)) return false;
+    }
+    return false;
+  }
+  return Object.keys(WHATS_NEW)
+    .filter(v => isNewer(v, lastSeen))
+    .sort((a, b) => isNewer(b, a) ? 1 : -1); // newest first
+}
+
+function renderWhatsNew() {
+  const lastSeen = localStorage.getItem('eweome_last_seen_version') || '';
+  const newVersions = versionsNewerThan(lastSeen);
+  const allFeatures = newVersions.flatMap(v => (WHATS_NEW[v]?.features || []));
+  const headline = newVersions.length === 1
+    ? 'New in ' + newVersions[0]
+    : "Here's what's new";
+
+  const featureRows = allFeatures.map(f =>
+    '<div style="display:flex;gap:14px;align-items:flex-start;padding:13px 0;border-bottom:0.5px solid var(--border);">'
+    + '<div style="font-size:22px;flex-shrink:0;width:32px;text-align:center;">' + f.icon + '</div>'
+    + '<div style="flex:1;min-width:0;">'
+    + '<div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:3px;">' + esc(f.heading) + '</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.55;">' + esc(f.body) + '</div>'
+    + '</div>'
+    + '</div>'
+  ).join('');
+
+  return `
+    <div class="signin-screen" style="padding:40px 24px 32px;gap:0;justify-content:flex-start;min-height:100%;">
+      <div style="text-align:center;margin-bottom:24px;">
+        ${sheepSvg(56)}
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:var(--green-600);margin-top:12px;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text-1);margin-top:14px;">${esc(headline)}</div>
+      </div>
+      <div style="width:100%;max-width:360px;background:var(--surface);border-radius:var(--radius-md);border:0.5px solid var(--border);padding:0 16px;margin-bottom:24px;">
+        ${featureRows}
+      </div>
+      <div style="width:100%;max-width:360px;">
+        <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="dismissWhatsNew()">Got it</button>
+      </div>
+    </div>`;
+}
+
+function dismissWhatsNew() {
+  localStorage.setItem('eweome_last_seen_version', APP_VERSION);
+  const restorable = ['home','position','pending','all_connections','notes','help','groups'];
+  const last = localStorage.getItem('eweome_last_screen');
+  go(last && restorable.includes(last) ? last : 'home');
+}
+function renderActivityDigest() {
+  const items = A.activityDigest || [];
+  const rows = items.map(item => {
+    let icon = '&#128276;'; // bell
+    let iconBg = 'var(--green-50)'; let iconColor = 'var(--green-600)';
+    if (item.status === 'rejected' || item.status === 'cancelled') {
+      icon = '&#10060;'; iconBg = 'var(--red-50)'; iconColor = 'var(--red-600)';
+    } else if (item.status === 'queried') {
+      icon = '&#63;'; iconBg = 'var(--amber-50)'; iconColor = 'var(--amber-700)';
+    } else if (item.status === 'settled') {
+      icon = '&#10003;'; iconBg = 'var(--green-50)'; iconColor = 'var(--green-600)';
+    } else if (item.status === 'settlement_pending') {
+      icon = '&#128176;'; iconBg = 'var(--amber-50)'; iconColor = 'var(--amber-700)';
+    } else if (item.status === 'agreed') {
+      icon = '&#10003;'; iconBg = 'var(--green-50)'; iconColor = 'var(--green-600)';
+    }
+    return '<div style="display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:0.5px solid var(--border);">'
+      + '<div style="width:34px;height:34px;border-radius:50%;background:' + iconBg + ';color:' + iconColor + ';display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">' + icon + '</div>'
+      + '<div style="flex:1;min-width:0;"><div style="font-size:13px;line-height:1.5;color:var(--text-1);">' + esc(item.text) + '</div></div>'
+      + '</div>';
+  }).join('');
+
+  const count = items.length;
+  const headline = count === 1 ? 'Something happened while you were away' : count + ' things happened while you were away';
+
+  return `
+    <div class="signin-screen" style="padding:40px 24px 32px;gap:0;justify-content:flex-start;min-height:100%;">
+      <div style="text-align:center;margin-bottom:24px;">
+        ${sheepSvg(56)}
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:var(--green-600);margin-top:12px;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
+        <div style="font-size:15px;font-weight:500;color:var(--text-1);margin-top:14px;">${esc(headline)}</div>
+      </div>
+      <div style="width:100%;max-width:360px;background:var(--surface);border-radius:var(--radius-md);border:0.5px solid var(--border);padding:0 16px;margin-bottom:24px;">
+        ${rows}
+      </div>
+      <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="dismissActivityDigest('pending')">Go to Pending</button>
+        <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="dismissActivityDigest('home')">Go to Home</button>
+      </div>
+    </div>`;
+}
+
+function dismissActivityDigest(dest) {
+  A.activityDigest = [];
+  go(dest || 'home');
+}
 function renderHelp() {
   const sections = [
     {
@@ -3724,7 +3867,12 @@ function renderGroupDetail() {
     <div class="screen-header">
       <button class="back-btn" onclick="go('groups')" aria-label="Back">&#8249;</button>
       <span class="screen-title">${esc(group.name)}</span>
-      <button onclick="go('group_expense')" style="background:none;border:none;font-size:22px;color:var(--green-600);cursor:pointer;padding:4px 8px;">+</button>
+      <div style="margin-left:auto;display:flex;gap:4px;align-items:center;">
+        ${group.createdBy === uid ? `<button onclick="deleteOrCloseGroup('${group.id}')" style="background:none;border:none;cursor:pointer;padding:4px 8px;color:var(--text-3);" aria-label="Delete group" title="Delete group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+        </button>` : ''}
+        <button onclick="go('group_expense')" style="background:none;border:none;font-size:22px;color:var(--green-600);cursor:pointer;padding:4px 8px;">+</button>
+      </div>
     </div>
     <div style="padding:12px 16px;background:var(--green-50);border-bottom:0.5px solid var(--green-100);">
       <div style="font-size:13px;color:var(--green-700);">${positionText}</div>
@@ -3852,6 +4000,106 @@ async function executeSettleUp(groupId, transfers) {
   }
   showToast('Claims created — check your Pending tab!');
   go('pending');
+}
+
+/* ----------------------------------------------------------------
+   GROUP DELETE / CLOSE
+---------------------------------------------------------------- */
+async function deleteOrCloseGroup(groupId) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const hasExpenses = (group.expenses || []).length > 0;
+  if (!hasExpenses) {
+    showModal('Delete this group? It has no expenses so nothing will be lost.', [
+      { label: 'Delete group', style: 'btn-red', action: () => deleteGroup(groupId) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]);
+    return;
+  }
+  const balances = computeGroupBalances(group);
+  const hasOutstanding = Object.values(balances).some(b => Math.abs(b) > 0.01);
+  if (!hasOutstanding) {
+    showModal('Everyone\'s all square in this group. Close and delete it?', [
+      { label: 'Close group', style: 'btn-red', action: () => deleteGroup(groupId) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]);
+    return;
+  }
+  // Outstanding balances — offer settle & close or delete without settling
+  showModal(
+    '<div><div style="font-size:14px;font-weight:500;margin-bottom:8px;">This group has outstanding balances</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.6;">You can settle up and close — which creates normal pending claims between all members for the remaining balances — or just delete the group and lose the history.</div></div>',
+    [
+      { label: 'Settle & close', style: 'btn-green', action: () => settleAndCloseGroup(groupId) },
+      { label: 'Delete without settling', style: 'btn-red', action: () => {
+          showModal('Are you sure? All expense history for this group will be permanently lost.', [
+            { label: 'Yes, delete it', style: 'btn-red', action: () => deleteGroup(groupId) },
+            { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+          ]);
+        }
+      },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]
+  );
+}
+
+async function settleAndCloseGroup(groupId) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const uid = A.user?.uid;
+  const myName = A.userDoc?.displayName || 'Someone';
+  const today2 = new Date().toISOString().split('T')[0];
+  const groupName = group.name || 'group';
+  const balances = computeGroupBalances(group);
+  const transfers = minimizeCashFlow(balances, group);
+  if (transfers.length === 0) {
+    await deleteGroup(groupId);
+    return;
+  }
+  // Build member name map
+  const memberNames = {};
+  (A.connections || []).forEach(c => { if (c.uid || c.id) memberNames[c.uid || c.id] = c.name; });
+  memberNames[uid] = myName;
+  // Create claims for ALL pairs (not just current user)
+  let created = 0;
+  for (const t of transfers) {
+    try {
+      const credName = t.to === uid ? myName : (memberNames[t.to] || t.toName || 'Unknown');
+      const debName  = t.from === uid ? myName : (memberNames[t.from] || t.fromName || 'Unknown');
+      await db.collection('claims').add({
+        creditorUid:  t.to,
+        creditorName: credName,
+        debtorUid:    t.from,
+        debtorName:   debName,
+        amount:       t.amount,
+        description:  'Settle up: ' + groupName,
+        status:       'pending',
+        type:         'eweome',
+        participants: [t.to, t.from],
+        date:         today2,
+        groupId:      groupId,
+        createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+      });
+      created++;
+      // Notify both parties if neither is the current user, or the other party if one is
+      if (t.to !== uid)   sendPushNotification(t.to,   myName + ' settled up group: ' + groupName, fmt(t.amount) + ' claim sent');
+      if (t.from !== uid) sendPushNotification(t.from, myName + ' settled up group: ' + groupName, fmt(t.amount) + ' claim sent');
+    } catch(e) { console.error('settleAndCloseGroup claim error:', e); }
+  }
+  await deleteGroup(groupId, true);
+  showToast(created + ' claim' + (created !== 1 ? 's' : '') + ' created — group closed.');
+  go('pending');
+}
+
+async function deleteGroup(groupId, silent) {
+  try {
+    await db.collection('groups').doc(groupId).delete();
+    if (!silent) showToast('Group deleted.');
+    go('groups');
+  } catch(e) {
+    showToast('Could not delete group. Please try again.');
+  }
 }
 
 function renderGroupNew() {
@@ -4207,7 +4455,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.4</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.5</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -4707,6 +4955,69 @@ function subscribeToData(uid) {
       // Fully settled history
       A.settled = all.filter(c => c.status === 'settled');
 
+      // Activity digest: on first load, check for changes since last open
+      if (!A._activityChecked) {
+        A._activityChecked = true;
+        const lastOpenedMs = parseInt(localStorage.getItem('eweome_last_opened') || '0', 10);
+        // Update last opened NOW so next session sees this session's activity
+        localStorage.setItem('eweome_last_opened', Date.now().toString());
+        if (lastOpenedMs > 0) {
+          const uid2 = uid;
+          const digest = [];
+          all.forEach(c => {
+            const updatedMs = c.updatedAt?.toDate?.()?.getTime?.() || 0;
+            if (updatedMs <= lastOpenedMs) return;
+            // Figure out what happened and who did it
+            const iAmCreditor = c.creditorUid === uid2;
+            const iAmDebtor   = c.debtorUid   === uid2;
+            const iAmSender   = (c.type !== 'ioowe' && iAmCreditor) || (c.type === 'ioowe' && iAmDebtor);
+            const otherName   = iAmCreditor ? (c.debtorName || 'Someone') : (c.creditorName || 'Someone');
+            const createdMs   = c.createdAt?.toDate?.()?.getTime?.() || 0;
+            const isNew       = createdMs > lastOpenedMs;
+            let text = null;
+            if (isNew && !iAmSender) {
+              // Someone sent ME something
+              if (c.type === 'eweome') text = otherName + ' sent you a YOM for ' + fmt(c.amount) + ' — ' + (c.description || 'no description');
+              else                     text = otherName + ' logged an IOU to you for ' + fmt(c.amount) + ' — ' + (c.description || 'no description');
+            } else if (!isNew) {
+              // Existing claim that changed
+              switch (c.status) {
+                case 'agreed':
+                  if (!iAmSender) text = otherName + ' accepted a claim for ' + fmt(c.amount);
+                  break;
+                case 'queried':
+                  if (iAmSender && c.counterAmount) text = otherName + ' countered your ' + fmt(c.amount) + ' claim with ' + fmt(c.counterAmount);
+                  else if (iAmSender && c.question)  text = otherName + ' has a question about your ' + fmt(c.amount) + ' claim';
+                  else if (!iAmSender && c.answeredQuestion) text = otherName + ' answered your question on the ' + fmt(c.amount) + ' claim';
+                  break;
+                case 'rejected':
+                  if (iAmSender) text = otherName + ' rejected your claim for ' + fmt(c.amount);
+                  break;
+                case 'settlement_pending':
+                  if (iAmCreditor) text = otherName + ' says they\'ve paid ' + fmt(c.amount);
+                  break;
+                case 'settled':
+                  text = 'Your ' + fmt(c.amount) + ' claim with ' + otherName + ' is now settled';
+                  break;
+                case 'cancelled':
+                  if (!iAmSender) text = otherName + ' withdrew a claim for ' + fmt(c.amount);
+                  break;
+              }
+            }
+            if (text) digest.push({ text, claimId: c.id, status: c.status, amount: c.amount });
+          });
+          if (digest.length > 0) {
+            A.activityDigest = digest;
+            // Only show digest if we're on a stable screen (not mid-flow), and only once
+            const stableScreens = ['home','position','pending','groups','all_connections','notes','help'];
+            if (stableScreens.includes(A.screen)) {
+              go('activity_digest');
+              return;
+            }
+          }
+        }
+      }
+
       if (!['loading','signin'].includes(A.screen)) render();
     });
   A._unsubs.push(u2);
@@ -4738,7 +5049,9 @@ auth.onAuthStateChanged(async fbUser => {
     if (A.needsDisplayName) go('name_prompt');
     else if (A.needsOnboarding) go('onboarding');
     else if (!A.welcomeSeen && !localStorage.getItem('eweome_welcome_seen')) go('welcome');
+    else if (hasNewFeaturesToShow()) go('whats_new');
     else {
+      localStorage.setItem('eweome_last_seen_version', APP_VERSION);
       const restorable = ['home','position','pending','all_connections','notes','help','groups'];
       const last = localStorage.getItem('eweome_last_screen');
       go(last && restorable.includes(last) ? last : 'home');
