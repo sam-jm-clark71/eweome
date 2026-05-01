@@ -2668,12 +2668,6 @@ function renderPending() {
       <div style="font-size:17px;font-weight:500;margin-bottom:4px;">Pending</div>
     </div>
     <hr class="divider">
-    ${incoming.length === 0 && outgoing.length === 0 ? `
-      <div style="padding:40px 24px;text-align:center;">
-        <div style="font-size:40px;margin-bottom:14px;">&#10003;</div>
-        <div style="font-size:17px;font-weight:500;margin-bottom:8px;">All caught up!</div>
-        <div style="font-size:13px;color:var(--text-2);line-height:1.7;">Nothing needs your attention right now.</div>
-      </div>` : ''}
     ${incoming.length > 0 ? `
       <div style="padding:10px 16px 6px;">
         <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Action needed</div>
@@ -5008,12 +5002,8 @@ function subscribeToData(uid) {
           });
           if (digest.length > 0) {
             A.activityDigest = digest;
-            // Only show digest if we're on a stable screen (not mid-flow), and only once
-            const stableScreens = ['home','position','pending','groups','all_connections','notes','help'];
-            if (stableScreens.includes(A.screen)) {
-              go('activity_digest');
-              return;
-            }
+            go('activity_digest');
+            return;
           }
         }
       }
