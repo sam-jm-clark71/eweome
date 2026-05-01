@@ -27,18 +27,18 @@ exports.sendPushNotification = functions.firestore
         await snap.ref.update({ sent: true, error: 'No FCM token' });
         return null;
       }
-      await messaging.send({
-        token: fcmToken,
-        notification: { title, body: body || '' },
-        webpush: {
-          notification: {
-            title, body: body || '',
-            icon: 'https://eweome-41e0f.web.app/icon-192.png',
-            requireInteraction: false
-          },
-          fcmOptions: { link: 'https://eweome-41e0f.web.app' }
-        }
-      });
+await messaging.send({
+  token: fcmToken,
+  notification: { title: 'ewe-o-me', body: 'You have new activity — open the app to catch up.' },
+  webpush: {
+    notification: {
+      title: 'ewe-o-me', body: 'You have new activity — open the app to catch up.',
+      icon: 'https://eweome-41e0f.web.app/icon-192.png',
+      requireInteraction: false
+    },
+    fcmOptions: { link: 'https://eweome-41e0f.web.app' }
+  }
+});
       await snap.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp() });
       console.log('Notification sent to', toUid, ':', title);
       return null;
