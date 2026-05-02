@@ -100,3 +100,66 @@ exports.linkPendingClaims = functions.firestore
       return null;
     }
   });
+
+  // Runs daily — nudges people who have unactioned claims older than 7 days
+  exports.sendClaimReminders = functions.pubsub
+  .schedule('every 24 hours')
+  .timeZone('Europe/London')
+  .onRun(async (context) => {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const snap = await db.collection('claims')
+      .where('status', 'in', ['pending', 'queried'])
+      .get();
+
+    for (const doc of snap.docs) {
+      const claim = doc.data();
+
+      // Skip if updated recently (still active conversation)
+      const updatedAt = claim.updatedAt?.toDate?.() || new Date(0);
+      if (updatedAt > oneWeekAgo) continue;
+
+      // Skip if we already sent a reminder within the last 7 days
+      const lastReminder = claim.lastReminderAt?.toDate?.() || new Date(0);
+      if (lastReminder > oneWeekAgo) continue;
+
+      // Work out who needs to act
+      let notifyUid = null;
+      const isIOU = claim.type === 'ioowe';
+
+      if (claim.status === 'pending') {
+        // YOM: debtor needs to act. IOU: creditor needs to act.
+        notifyUid = isIOU ? claim.creditorUid : claim.debtorUid;
+      } else if (claim.status === 'queried') {
+        if (claim.answeredQuestion) {
+          // Debtor asked question, creditor answered — debtor needs to decide
+          notifyUid = claim.debtorUid;
+        } else if (claim.counterAmount || claim.question) {
+          // Debtor countered or asked question — creditor needs to respond
+          notifyUid = claim.creditorUid;
+        }
+      }
+
+      if (!notifyUid) continue;
+
+      try {
+        await db.collection('notifications').add({
+          toUid: notifyUid,
+          title: 'ewe-o-me',
+          body: 'You have new activity — open the app to catch up.',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          sent: false
+        });
+
+        await doc.ref.update({
+          lastReminderAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        console.log('Reminder sent for claim', doc.id, 'to', notifyUid);
+      } catch (e) {
+        console.error('Error sending reminder for claim', doc.id, ':', e.message);
+      }
+    }
+
+    return null;
+  });
