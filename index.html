@@ -629,6 +629,13 @@ if (messaging) {
    the last version they opened the app on.
 ================================================================ */
 const WHATS_NEW = {
+  'v1.8.6': {
+    title: 'Partial payments & Pay now',
+    features: [
+      { icon: '&#8617;', heading: 'Partial payments', body: 'You can now pay a debt off in chunks. On any agreed claim, tap "Pay part of this" to log a partial payment. The other person confirms it, and the remaining balance updates automatically.' },
+      { icon: '&#127984;', heading: 'Smarter payment button', body: 'The "Pay by bank transfer" button now tries to open your banking app directly with the amount and details pre-filled. If that doesn\'t work on your device, it falls back to the existing copy-details view.' }
+    ]
+  },
   'v1.8.5': {
     title: 'Activity digest & group management',
     features: [
@@ -644,7 +651,7 @@ const WHATS_NEW = {
   }
 };
 
-const APP_VERSION = 'v1.8.5';
+const APP_VERSION = 'v1.8.6';
 
 /* ================================================================
    APP STATE
@@ -710,6 +717,7 @@ function isAndroid() { return /Android/.test(navigator.userAgent); }
 function isAPK()     { return !!window.AndroidBridge; }
 function isSafari()  { return /^((?!chrome|android).)*safari/i.test(navigator.userAgent); }
 function fmt(n)   { return '\u00a3' + parseFloat(n || 0).toFixed(2); }
+function remainingAmount(c) { return Math.max(0, (c.amount || 0) - (c.amountPaid || 0)); }
 function today()  { return new Date().toISOString().split('T')[0]; }
 
 function fmtDate(d) {
@@ -922,6 +930,7 @@ function render() {
     welcome:         renderWelcome,
     whats_new:       renderWhatsNew,
     activity_digest: renderActivityDigest,
+    partial_payment: renderPartialPayment,
     name_prompt:     renderNamePrompt,
     unregistered_claim: renderUnregisteredClaim,
     new_person_claim:    renderNewPersonClaim,
@@ -1711,19 +1720,46 @@ function renderReqDetail() {
 
     ${(claim.status === 'agreed' || claim.status === 'accepted') ? `
       <div style="padding:12px 16px 0;border-top:0.5px solid var(--border);margin-top:4px;">
+        ${(claim.amountPaid || 0) > 0 ? `
+          <div style="background:var(--green-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--green-100);margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:12px;color:var(--green-700);font-weight:500;">Partially paid</span>
+              <span style="font-size:12px;color:var(--green-700);">${fmt(claim.amountPaid)} of ${fmt(claim.amount)}</span>
+            </div>
+            <div style="height:6px;background:var(--green-100);border-radius:3px;overflow:hidden;">
+              <div style="height:100%;background:var(--green-500);border-radius:3px;width:${Math.min(100,Math.round((claim.amountPaid/claim.amount)*100))}%;"></div>
+            </div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:6px;">${fmt(remainingAmount(claim))} still outstanding</div>
+          </div>` : ''}
+        ${(claim.pendingPartialAmount || 0) > 0 && iAmCreditor ? `
+          <div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--amber-100);margin-bottom:12px;">
+            <p style="font-size:13px;color:var(--amber-700);margin-bottom:10px;line-height:1.5;">
+              ${esc(claim.debtorName)} says they've paid you ${fmt(claim.pendingPartialAmount)}.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <button class="btn btn-green" style="padding:11px;" onclick="confirmPartialPayment('${claim.id}')">Yes, I've received ${fmt(claim.pendingPartialAmount)} &#10003;</button>
+              <button class="btn btn-red"   style="padding:11px;" onclick="disputePartialPayment('${claim.id}')">I haven't received this yet</button>
+            </div>
+          </div>` : ''}
+        ${(claim.pendingPartialAmount || 0) > 0 && iAmDebtor ? `
+          <div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--amber-100);margin-bottom:12px;">
+            <p style="font-size:12px;color:var(--amber-700);">Waiting for ${esc(claim.creditorName)} to confirm your payment of ${fmt(claim.pendingPartialAmount)}.</p>
+          </div>` : ''}
         <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.6;">
           ${iAmCreditor
             ? "Once you've received the money, mark this as settled."
             : "Once you've paid, tap below. The other person will need to confirm."}
         </p>
-        ${!iAmCreditor ? `
+        ${!iAmCreditor && !(claim.pendingPartialAmount > 0) ? `
           ${A.userDoc?.paymentLink ? `<button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sharePaymentLink('${claim.id}')">&#128178; Send payment via link</button>` : ''}
-          <button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="showBankDetails('${claim.id}')">&#127984; Pay by bank transfer</button>
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="showPayNow('${claim.id}')">&#127984; Pay by bank transfer</button>
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="goToPartialPayment('${claim.id}')">&#8617; Pay part of this...</button>
           ${!A.userDoc?.paymentLink ? `<div style="font-size:12px;color:var(--text-2);text-align:center;padding:2px 0;">&#128161; <a href="#" onclick="go('settings');return false;" style="color:var(--green-600);">Add a payment link</a> for even easier payments.</div>` : ''}
         ` : ''}
+        ${!(claim.pendingPartialAmount > 0) ? `
         <button class="btn btn-ghost" style="padding:13px;" onclick="markSettled('${claim.id}')">
           ${iAmCreditor ? "I've received this money &#10003;" : "I've paid this &#10003;"}
-        </button>
+        </button>` : ''}
       </div>` : ''}
 
     ${claim.status === 'settlement_pending' && iAmCreditor ? `
@@ -1983,7 +2019,6 @@ function sharePaymentLink(claimId) {
   const creditorName = claim.creditorName || 'them';
   const text = 'Hi ' + creditorName + ' — paying you ' + fmt(claim.amount) +
     (claim.description ? ' for ' + claim.description : '') + ' now.\n\n' + link;
-  // Use direct WhatsApp link if we have their phone number
   const conn = (A.connections||[]).find(c => c.uid === claim.creditorUid || c.id === claim.creditorUid);
   const phone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') : null;
   if (phone) {
@@ -1993,6 +2028,67 @@ function sharePaymentLink(claimId) {
   } else {
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   }
+}
+
+async function showPayNow(claimId) {
+  const all = [...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
+  const claim = all.find(c => c.id === claimId);
+  if (!claim) return;
+  const creditorUid = claim.creditorUid;
+  let bankDetails = null;
+  try {
+    const snap = await db.collection('bank_details').doc(creditorUid).get();
+    if (snap.exists) bankDetails = snap.data();
+  } catch(e) {}
+
+  const remaining = remainingAmount(claim);
+  const amountStr = remaining.toFixed(2);
+  const ref = (bankDetails?.reference || claim.description || A.userDoc?.displayName || 'payment').substring(0, 18);
+
+  // Attempt payto:// deep link (RFC 8905 — supported by some UK banking apps)
+  if (bankDetails) {
+    const sortRaw = (bankDetails.sortCode || '').replace(/[^0-9]/g, '');
+    const accRaw  = (bankDetails.accountNumber || '').replace(/[^0-9]/g, '');
+    if (sortRaw.length === 6 && accRaw.length === 8) {
+      const paytoUrl = `payto://sort-bic/${sortRaw.slice(0,2)}-${sortRaw.slice(2,4)}-${sortRaw.slice(4,6)}/${accRaw}?amount=GBP:${amountStr}&message=${encodeURIComponent(ref)}`;
+      // Try to open the payto URI; if the browser/OS handles it, great
+      // We detect failure by checking if we're still in the foreground after a short delay
+      let appOpened = false;
+      window.addEventListener('blur', () => { appOpened = true; }, { once: true });
+      window.location.href = paytoUrl;
+      await new Promise(r => setTimeout(r, 800));
+      if (appOpened) return; // Banking app opened — done
+    }
+  }
+
+  // Fallback: show the bank details modal (same as before, just renamed button)
+  if (!bankDetails) {
+    showModal(
+      esc(claim.creditorName) + ' hasn\'t added bank details yet. Ask them to add their details in Settings.',
+      [{ label: 'OK', style: 'btn-ghost', action: () => {} }]
+    );
+    return;
+  }
+  const amount = fmt(remaining);
+  const details = `Account name: ${bankDetails.name}\nSort code: ${bankDetails.sortCode}\nAccount number: ${bankDetails.accountNumber}\nReference: ${ref}\nAmount: ${amount}`;
+  showModal(
+    `<div style="text-align:left;">
+      <div style="font-size:13px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">${esc(claim.creditorName)}'s bank details</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div><div style="font-size:11px;color:var(--text-3);">Account name</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.name)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-3);">Sort code</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.sortCode)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-3);">Account number</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.accountNumber)}</div></div>
+        ${bankDetails.reference ? `<div><div style="font-size:11px;color:var(--text-3);">Reference</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.reference)}</div></div>` : ''}
+        <div style="margin-top:4px;padding:10px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);"><div style="font-size:11px;color:var(--text-3);">Amount to pay</div><div style="font-size:18px;font-weight:500;color:var(--green-700);">${amount}</div></div>
+      </div>
+    </div>`,
+    [
+      { label: 'Copy details', style: 'btn-green', action: () => {
+        navigator.clipboard?.writeText(details).then(() => showToast('Copied!')).catch(() => showToast('Details shown above — copy manually'));
+      }},
+      { label: 'Done', style: 'btn-ghost', action: () => {} }
+    ]
+  );
 }
 
 async function markSettled(id) {
@@ -2034,6 +2130,120 @@ async function disputeSettlement(id) {
       settlementRequestedBy: null,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    goNextPending();
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+/* ----------------------------------------------------------------
+   PARTIAL PAYMENTS
+---------------------------------------------------------------- */
+function goToPartialPayment(claimId) {
+  A.selectedClaimId = claimId;
+  A._partialAmount = '';
+  go('partial_payment');
+}
+
+function renderPartialPayment() {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === A.selectedClaimId);
+  if (!claim) return '<div style="padding:40px;text-align:center;">Claim not found.</div>';
+  const remaining = remainingAmount(claim);
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('req_detail')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Partial payment</span>
+    </div>
+    <div style="padding:20px 16px;display:flex;flex-direction:column;gap:16px;">
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:4px;">Claim from ${esc(claim.creditorName)}</div>
+        <div style="font-size:22px;font-weight:600;color:var(--text-1);">${fmt(claim.amount)}</div>
+        ${(claim.amountPaid || 0) > 0 ? `<div style="font-size:13px;color:var(--green-600);margin-top:4px;">${fmt(claim.amountPaid)} already paid · ${fmt(remaining)} remaining</div>` : ''}
+        ${claim.description ? `<div style="font-size:13px;color:var(--text-2);margin-top:4px;">${esc(claim.description)}</div>` : ''}
+      </div>
+      <div>
+        <label class="field-label">How much are you paying now?</label>
+        <div style="position:relative;">
+          <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text-2);">£</span>
+          <input id="partial-amt" type="number" min="0.01" step="0.01" max="${remaining.toFixed(2)}"
+            style="padding:13px 14px 13px 28px;font-size:17px;width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);box-sizing:border-box;"
+            placeholder="0.00" value="${A._partialAmount || ''}"
+            oninput="A._partialAmount=this.value"
+            inputmode="decimal" />
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:6px;">Must be between £0.01 and ${fmt(remaining)}.</div>
+      </div>
+      <button class="btn btn-green" style="padding:14px;" onclick="submitPartialPayment('${claim.id}')">Log this payment</button>
+      <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="go('req_detail')">Cancel</button>
+    </div>`;
+}
+
+async function submitPartialPayment(claimId) {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === claimId);
+  if (!claim) return;
+  const remaining = remainingAmount(claim);
+  const amt = parseFloat(A._partialAmount);
+  if (!amt || isNaN(amt) || amt <= 0) { showToast('Please enter a valid amount.'); return; }
+  if (amt > remaining + 0.001) { showToast('Amount exceeds the remaining balance of ' + fmt(remaining) + '.'); return; }
+  // If paying the full remaining amount, just use the normal markSettled flow
+  if (Math.abs(amt - remaining) < 0.01) {
+    A._partialAmount = '';
+    go('req_detail');
+    await markSettled(claimId);
+    return;
+  }
+  try {
+    await db.collection('claims').doc(claimId).update({
+      pendingPartialAmount: amt,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    sendPushNotification(claim.creditorUid, A.userDoc?.displayName || 'Someone',
+      'says they\'ve paid ' + fmt(amt) + ' towards the ' + fmt(claim.amount) + ' claim');
+    A._partialAmount = '';
+    showToast('Logged! Waiting for ' + (claim.creditorName || 'them') + ' to confirm.');
+    go('home');
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+async function confirmPartialPayment(claimId) {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === claimId);
+  if (!claim) return;
+  const partial = claim.pendingPartialAmount || 0;
+  const newAmountPaid = (claim.amountPaid || 0) + partial;
+  const fullyPaid = newAmountPaid >= claim.amount - 0.01;
+  try {
+    if (fullyPaid) {
+      await db.collection('claims').doc(claimId).update({
+        status: 'settled',
+        amountPaid: newAmountPaid,
+        pendingPartialAmount: 0,
+        settledAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast('Fully settled — nice one!');
+    } else {
+      await db.collection('claims').doc(claimId).update({
+        amountPaid: newAmountPaid,
+        pendingPartialAmount: 0,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast(fmt(partial) + ' confirmed. ' + fmt(claim.amount - newAmountPaid) + ' still outstanding.');
+    }
+    sendPushNotification(claim.debtorUid, A.userDoc?.displayName || 'Someone',
+      fullyPaid ? 'confirmed your final payment — all settled!' : 'confirmed your payment of ' + fmt(partial));
+    goNextPending();
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+async function disputePartialPayment(claimId) {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === claimId);
+  if (!claim) return;
+  try {
+    await db.collection('claims').doc(claimId).update({
+      pendingPartialAmount: 0,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    sendPushNotification(claim.debtorUid, A.userDoc?.displayName || 'Someone',
+      'hasn\'t received your payment yet — please check and try again');
+    showToast('Disputed. ' + (claim.debtorName || 'They') + ' has been notified.');
     goNextPending();
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
@@ -2302,12 +2512,12 @@ function renderPosition() {
     if (claim.creditorUid === A.user.uid) {
       const id = claim.debtorUid;
       if (!bals[id]) bals[id] = { name: claim.debtorName, bal: 0, hasPendingSettlement: false };
-      bals[id].bal += claim.amount;
+      bals[id].bal += remainingAmount(claim);
       if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
     } else if (claim.debtorUid === A.user.uid) {
       const id = claim.creditorUid;
       if (!bals[id]) bals[id] = { name: claim.creditorName, bal: 0, hasPendingSettlement: false };
-      bals[id].bal -= claim.amount;
+      bals[id].bal -= remainingAmount(claim);
       if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
     }
   });
@@ -2614,8 +2824,8 @@ function renderSimplify() {
 function renderPosHistory() {
   const uid = A.user?.uid;
   const all = [...A.settled, ...A.ledger].sort((a,b) => (b.date||'').localeCompare(a.date||''));
-  const totalOwed = A.ledger.filter(c=>c.creditorUid===uid).reduce((s,c)=>s+c.amount,0);
-  const totalOwe  = A.ledger.filter(c=>c.debtorUid===uid).reduce((s,c)=>s+c.amount,0);
+  const totalOwed = A.ledger.filter(c=>c.creditorUid===uid).reduce((s,c)=>s+remainingAmount(c),0);
+  const totalOwe  = A.ledger.filter(c=>c.debtorUid===uid).reduce((s,c)=>s+remainingAmount(c),0);
   const totalSettled = A.settled.length;
   return `
     <div class="screen-header">
@@ -2684,6 +2894,9 @@ function renderPending() {
         } else if (isSettle) {
           label = esc(c.debtorName) + ' says they\'ve paid you';
           sublabel = 'Tap to confirm you received it';
+        } else if (c.status === 'agreed' && (c.pendingPartialAmount || 0) > 0 && iAmCr) {
+          label = esc(c.debtorName) + ' says they\'ve paid ' + fmt(c.pendingPartialAmount);
+          sublabel = 'Tap to confirm you received this partial payment';
         } else if (c.status === 'queried' && c.question && !c.counterAmount && iAmCr) {
           label = esc(c.debtorName) + ' has asked you a question';
           sublabel = 'Tap to read it and respond';
@@ -4449,7 +4662,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.5</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.6</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -4928,6 +5141,7 @@ function subscribeToData(uid) {
         (c.status === 'evidence_requested'  && c.creditorUid === uid) ||
         (c.status === 'evidence_requested'  && c.debtorUid   === uid && c.evidenceUrl) ||
         (c.status === 'settlement_pending'  && c.creditorUid === uid) ||
+        (c.status === 'agreed'              && (c.pendingPartialAmount||0) > 0 && c.creditorUid === uid) ||
         (c.status === 'rejected'            && c.creditorUid === uid && !c.creditorDismissed)
       ));
 
@@ -4957,49 +5171,72 @@ function subscribeToData(uid) {
         localStorage.setItem('eweome_last_opened', Date.now().toString());
         if (lastOpenedMs > 0) {
           const uid2 = uid;
-          const digest = [];
+          // Raw events — only things OTHER people did
+          const rawEvents = [];
           all.forEach(c => {
             const updatedMs = c.updatedAt?.toDate?.()?.getTime?.() || 0;
             if (updatedMs <= lastOpenedMs) return;
-            // Figure out what happened and who did it
             const iAmCreditor = c.creditorUid === uid2;
             const iAmDebtor   = c.debtorUid   === uid2;
             const iAmSender   = (c.type !== 'ioowe' && iAmCreditor) || (c.type === 'ioowe' && iAmDebtor);
             const otherName   = iAmCreditor ? (c.debtorName || 'Someone') : (c.creditorName || 'Someone');
             const createdMs   = c.createdAt?.toDate?.()?.getTime?.() || 0;
             const isNew       = createdMs > lastOpenedMs;
-            let text = null;
+            let eventType = null;
             if (isNew && !iAmSender) {
-              // Someone sent ME something
-              if (c.type === 'eweome') text = otherName + ' sent you a YOM for ' + fmt(c.amount) + ' — ' + (c.description || 'no description');
-              else                     text = otherName + ' logged an IOU to you for ' + fmt(c.amount) + ' — ' + (c.description || 'no description');
+              eventType = c.type === 'eweome' ? 'sent_yom' : 'sent_iou';
             } else if (!isNew) {
-              // Existing claim that changed
               switch (c.status) {
                 case 'agreed':
-                  if (!iAmSender) text = otherName + ' accepted a claim for ' + fmt(c.amount);
-                  break;
+                  if (!iAmSender) eventType = 'accepted'; break;
                 case 'queried':
-                  if (iAmSender && c.counterAmount) text = otherName + ' countered your ' + fmt(c.amount) + ' claim with ' + fmt(c.counterAmount);
-                  else if (iAmSender && c.question)  text = otherName + ' has a question about your ' + fmt(c.amount) + ' claim';
-                  else if (!iAmSender && c.answeredQuestion) text = otherName + ' answered your question on the ' + fmt(c.amount) + ' claim';
+                  if (iAmSender && c.counterAmount)          eventType = 'countered';
+                  else if (iAmSender && c.question)          eventType = 'questioned';
+                  else if (!iAmSender && c.answeredQuestion) eventType = 'answered';
                   break;
                 case 'rejected':
-                  if (iAmSender) text = otherName + ' rejected your claim for ' + fmt(c.amount);
-                  break;
+                  if (iAmSender) eventType = 'rejected'; break;
                 case 'settlement_pending':
-                  if (iAmCreditor) text = otherName + ' says they\'ve paid ' + fmt(c.amount);
-                  break;
+                  if (iAmCreditor) eventType = 'marked_paid'; break;
                 case 'settled':
-                  text = 'Your ' + fmt(c.amount) + ' claim with ' + otherName + ' is now settled';
-                  break;
+                  // Only show to debtor — creditor did the confirming themselves
+                  if (iAmDebtor) eventType = 'settled'; break;
                 case 'cancelled':
-                  if (!iAmSender) text = otherName + ' withdrew a claim for ' + fmt(c.amount);
-                  break;
+                  if (!iAmSender) eventType = 'cancelled'; break;
               }
             }
-            if (text) digest.push({ text, claimId: c.id, status: c.status, amount: c.amount });
+            if (eventType) rawEvents.push({ eventType, otherName, amount: c.amount, claimId: c.id, status: c.status, counterAmount: c.counterAmount });
           });
+
+          // Collapse repeated events: group by (otherName, eventType)
+          const groups = {};
+          rawEvents.forEach(e => {
+            const key = e.otherName + '||' + e.eventType;
+            if (!groups[key]) groups[key] = { ...e, count: 0, total: 0, amounts: [] };
+            groups[key].count++;
+            groups[key].total += e.amount || 0;
+            groups[key].amounts.push(e.amount);
+          });
+
+          const digest = Object.values(groups).map(g => {
+            const n = g.otherName, c = g.count, t = fmt(g.total);
+            let text;
+            switch (g.eventType) {
+              case 'sent_yom':   text = c > 1 ? n+' sent you '+c+' new requests totalling '+t : n+' sent you a YOM for '+fmt(g.amounts[0]); break;
+              case 'sent_iou':   text = c > 1 ? n+' logged '+c+' IOUs to you totalling '+t     : n+' logged an IOU to you for '+fmt(g.amounts[0]); break;
+              case 'accepted':   text = c > 1 ? n+' accepted '+c+' of your claims ('+t+' total)' : n+' accepted your claim for '+fmt(g.amounts[0]); break;
+              case 'countered':  text = n+' has countered a claim'; break;
+              case 'questioned': text = c > 1 ? n+' has questions about '+c+' claims' : n+' has a question about your claim'; break;
+              case 'answered':   text = n+' answered your question'; break;
+              case 'rejected':   text = c > 1 ? n+' rejected '+c+' of your claims' : n+' rejected your claim for '+fmt(g.amounts[0]); break;
+              case 'marked_paid':text = c > 1 ? n+' says they\'ve paid you '+c+' debts ('+t+' total)' : n+' says they\'ve paid you '+fmt(g.amounts[0]); break;
+              case 'settled':    text = c > 1 ? n+' confirmed '+c+' debts as settled ('+t+' total)' : 'Your '+fmt(g.amounts[0])+' debt to '+n+' is now confirmed as settled'; break;
+              case 'cancelled':  text = c > 1 ? n+' withdrew '+c+' claims' : n+' withdrew a claim for '+fmt(g.amounts[0]); break;
+              default:           text = 'Activity with '+n;
+            }
+            return { text, claimId: g.claimId, status: g.status, amount: g.total };
+          });
+
           if (digest.length > 0) {
             A.activityDigest = digest;
             go('activity_digest');
