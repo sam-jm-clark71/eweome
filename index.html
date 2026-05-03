@@ -629,6 +629,12 @@ if (messaging) {
    the last version they opened the app on.
 ================================================================ */
 const WHATS_NEW = {
+  'v1.8.7': {
+    title: 'Debt simplification',
+    features: [
+      { icon: '&#9889;', heading: 'Debt simplification', body: 'When there\'s a debt loop between you and your connections — where everyone owes someone who owes someone else — the app can now suggest a simpler arrangement that needs fewer payments. Everyone has to agree before anything changes, and there\'s no pressure to accept.' }
+    ]
+  },
   'v1.8.6': {
     title: 'Partial payments & Pay now',
     features: [
@@ -651,7 +657,7 @@ const WHATS_NEW = {
   }
 };
 
-const APP_VERSION = 'v1.8.6';
+const APP_VERSION = 'v1.8.7';
 
 /* ================================================================
    APP STATE
@@ -702,6 +708,8 @@ const A = {
   notes: [],
   _editNoteId: null,
   groups: [],
+  simplifications: [],
+  selectedSimplificationId: null,
   selectedGroupId: null,
   welcomeSeen: false,
   _helpOpen: {},
@@ -931,6 +939,7 @@ function render() {
     whats_new:       renderWhatsNew,
     activity_digest: renderActivityDigest,
     partial_payment: renderPartialPayment,
+    simplification_detail: renderSimplificationDetail,
     name_prompt:     renderNamePrompt,
     unregistered_claim: renderUnregisteredClaim,
     new_person_claim:    renderNewPersonClaim,
@@ -1079,7 +1088,6 @@ function renderHome() {
       </button>
     </div>
     ${showNotifPrompt ? `
-      <div style="margin:0 16px 4px;padding:11px 13px;background:#F0F4FF;border-radius:var(--radius-sm);border:0.5px solid #C0CCEE;display:flex;align-items:flex-start;gap:10px;">
         <div style="font-size:18px;">&#128276;</div>
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:500;margin-bottom:2px;">Enable notifications</div>
@@ -1098,6 +1106,15 @@ function renderHome() {
           <div style="font-size:12px;color:var(--text-2);line-height:1.5;">In Safari, tap &#11014; then <strong>Add to Home Screen</strong> for the best experience.</div>
         </div>
         <button onclick="sessionStorage.setItem('ios_banner_dismissed','1');render()" style="background:none;border:none;font-size:18px;color:var(--text-3);cursor:pointer;padding:0;">&#215;</button>
+      </div>` : ''}
+    ${(A.simplifications||[]).length > 0 ? `
+      <div style="margin:0 16px 4px;padding:11px 13px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openSimplification('${A.simplifications[0].id}')">
+        <div style="font-size:18px;">&#9889;</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px;color:var(--green-700);">A simpler way to settle up</div>
+          <div style="font-size:12px;color:var(--green-600);line-height:1.5;">There's a suggested simplification involving you — tap to see it.</div>
+        </div>
+        <div style="color:var(--green-600);font-size:18px;">&#8250;</div>
       </div>` : ''}
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(12px,4vh,32px) 16px;gap:clamp(12px,4vh,32px);">
       <button class="circle-btn circle-green" onclick="startClaim('eweome')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
@@ -2816,6 +2833,190 @@ function renderSimplify() {
         Based on all outstanding agreed debts. Individual debts still need to be marked settled separately.
       </p>
     </div>`;
+}
+
+/* ================================================================
+   SCREEN: SIMPLIFICATION DETAIL (consent flow)
+================================================================ */
+function openSimplification(id) {
+  A.selectedSimplificationId = id;
+  go('simplification_detail');
+}
+
+function renderSimplificationDetail() {
+  const uid = A.user?.uid;
+  const simp = (A.simplifications || []).find(s => s.id === A.selectedSimplificationId);
+  if (!simp) return '<div style="padding:40px;text-align:center;">Simplification not found.</div>';
+
+  const myConsent = simp.consents?.[uid];
+  const currentCount = simp.currentTransactions || 0;
+  const simplifiedCount = simp.simplifiedTransactions || 0;
+  const saving = currentCount - simplifiedCount;
+
+  // Build name map for participants
+  const nameMap = {};
+  (simp.participantNames || {});
+  simp.participants.forEach((p, i) => {
+    nameMap[p] = (simp.participantNames || {})[p] || (p === uid ? (A.userDoc?.displayName || 'You') : 'Someone');
+  });
+
+  // Consent status summary
+  const waitingOn = simp.participants.filter(p => p !== uid && simp.consents?.[p] === null);
+  const agreedCount = simp.participants.filter(p => simp.consents?.[p] === true).length;
+
+  // SVG loop diagram — before
+  const beforeDiagram = buildLoopDiagram(simp.currentDebts || [], nameMap, uid, false);
+  // SVG simplified diagram — after
+  const afterDiagram  = buildLoopDiagram(simp.proposedDebts || [], nameMap, uid, true);
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('home')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Simplify debts</span>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:16px;">
+
+      <div style="background:var(--green-50);border-radius:var(--radius-md);border:0.5px solid var(--green-100);padding:14px 16px;">
+        <div style="font-size:15px;font-weight:600;color:var(--green-700);margin-bottom:4px;">A simpler way to settle up &#9889;</div>
+        <div style="font-size:13px;color:var(--green-700);line-height:1.6;">
+          There's a debt loop between ${simp.participants.map(p => p === uid ? 'you' : esc(nameMap[p])).join(', ')}.
+          Right now this needs <strong>${currentCount} payment${currentCount !== 1 ? 's' : ''}</strong>.
+          It could be simplified to just <strong>${simplifiedCount} payment${simplifiedCount !== 1 ? 's' : ''}</strong> — saving ${saving} step${saving !== 1 ? 's' : ''}.
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Right now</div>
+        ${beforeDiagram}
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;color:var(--green-600);">
+        <div style="flex:1;height:1px;background:var(--green-100);"></div>
+        <div style="font-size:13px;font-weight:500;">simplified to</div>
+        <div style="flex:1;height:1px;background:var(--green-100);"></div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">After simplification</div>
+        ${afterDiagram}
+      </div>
+
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;">
+        <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Everyone needs to agree</div>
+        <div style="font-size:12px;color:var(--text-2);line-height:1.6;">
+          ${simp.participants.map(p => {
+            const c = simp.consents?.[p];
+            const name = p === uid ? 'You' : esc(nameMap[p]);
+            const icon = c === true ? '&#10003;' : c === false ? '&#10007;' : '&#8230;';
+            const col  = c === true ? 'var(--green-600)' : c === false ? 'var(--red-600)' : 'var(--text-3)';
+            return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><span style="color:' + col + ';font-weight:600;width:16px;text-align:center;">' + icon + '</span><span>' + name + '</span></div>';
+          }).join('')}
+        </div>
+      </div>
+
+      ${myConsent === null ? `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button class="btn btn-green" style="padding:14px;" onclick="respondToSimplification('${simp.id}', true)">Yes, works for me &#10003;</button>
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="respondToSimplification('${simp.id}', false)">No thanks, leave it as it is</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);text-align:center;line-height:1.6;">
+          No pressure — if anyone prefers to leave things as they are, nothing will change.
+        </div>
+      ` : myConsent === true ? `
+        <div style="background:var(--green-50);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--green-100);text-align:center;">
+          <div style="font-size:13px;color:var(--green-700);">You've agreed &#10003; — waiting for the others.</div>
+        </div>
+      ` : `
+        <div style="background:var(--surface);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--border);text-align:center;">
+          <div style="font-size:13px;color:var(--text-2);">You've passed on this one. No action needed.</div>
+        </div>
+      `}
+    </div>`;
+}
+
+function buildLoopDiagram(debts, nameMap, myUid, isSimplified) {
+  if (!debts || debts.length === 0) {
+    return '<div style="text-align:center;padding:20px;font-size:13px;color:var(--text-3);">No payments needed.</div>';
+  }
+  // Build a simple horizontal/arc diagram in SVG
+  const people = [...new Set(debts.flatMap(d => [d.from, d.to]))];
+  const n = people.length;
+  const W = 320, H = n <= 3 ? 120 : 160;
+  const cx = W / 2, cy = H / 2;
+  const r = Math.min(cx, cy) - 36;
+
+  // Position nodes in a circle
+  const pos = {};
+  people.forEach((p, i) => {
+    const angle = (2 * Math.PI * i / n) - Math.PI / 2;
+    pos[p] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  });
+
+  const nodeR = 22;
+  const arrowColor = isSimplified ? '#3b6d11' : '#888';
+  const lineColor  = isSimplified ? '#88b85c' : '#ccc';
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px;display:block;margin:0 auto;">`;
+  svg += `<defs><marker id="arr${isSimplified ? 'S' : 'B'}" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="${arrowColor}"/></marker></defs>`;
+
+  // Draw edges
+  debts.forEach(d => {
+    const from = pos[d.from], to = pos[d.to];
+    if (!from || !to) return;
+    // Shorten line to not overlap nodes
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const sx = from.x + dx/dist * nodeR;
+    const sy = from.y + dy/dist * nodeR;
+    const ex = to.x   - dx/dist * (nodeR + 8);
+    const ey = to.y   - dy/dist * (nodeR + 8);
+    // Mid-point label
+    const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+    svg += `<line x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${lineColor}" stroke-width="1.5" marker-end="url(#arr${isSimplified ? 'S' : 'B'})"/>`;
+    svg += `<rect x="${(mx-18).toFixed(1)}" y="${(my-9).toFixed(1)}" width="36" height="16" rx="4" fill="white" opacity="0.9"/>`;
+    svg += `<text x="${mx.toFixed(1)}" y="${(my+4).toFixed(1)}" text-anchor="middle" font-size="9" fill="${arrowColor}" font-family="sans-serif">${esc(fmt(d.amount))}</text>`;
+  });
+
+  // Draw nodes
+  people.forEach(p => {
+    const {x, y} = pos[p];
+    const isMe = p === myUid;
+    const fillCol = isMe ? (isSimplified ? '#3b6d11' : '#5a8a2a') : 'white';
+    const strokeCol = isMe ? (isSimplified ? '#3b6d11' : '#5a8a2a') : '#ccc';
+    const textCol = isMe ? 'white' : '#444';
+    const label = (nameMap[p] || 'Unknown').split(' ')[0]; // first name only
+    svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${nodeR}" fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.5"/>`;
+    svg += `<text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle" font-size="10" fill="${textCol}" font-family="sans-serif" font-weight="${isMe ? '600' : '400'}">${esc(label.substring(0,6))}</text>`;
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+async function respondToSimplification(simplificationId, agreed) {
+  const uid = A.user?.uid;
+  if (!uid) return;
+  const msg = agreed
+    ? 'Are you happy to simplify these debts? The others will need to agree too.'
+    : 'Are you sure? Nothing will change and the others will be told it didn\'t work out.';
+  showModal(msg, [
+    { label: agreed ? 'Yes, works for me' : 'Yes, no thanks', style: agreed ? 'btn-green' : 'btn-ghost', action: async () => {
+      try {
+        await db.collection('simplifications').doc(simplificationId).update({
+          [`consents.${uid}`]: agreed,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        if (!agreed) {
+          showToast('No worries — nothing has changed.');
+          go('home');
+        } else {
+          showToast('Great! Waiting for the others to agree.');
+          render();
+        }
+      } catch(e) { showToast('Something went wrong. Please try again.'); }
+    }},
+    { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+  ]);
 }
 
 /* ================================================================
@@ -4662,7 +4863,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.6</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.7</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -5050,6 +5251,16 @@ function subscribeToData(uid) {
   A._unsubs.forEach(fn => fn());
   A._unsubs = [];
 
+  // Simplifications involving this user
+  const s1 = db.collection('simplifications')
+    .where('participants', 'array-contains', uid)
+    .where('status', '==', 'pending_consent')
+    .onSnapshot(snap => {
+      A.simplifications = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (!['loading','signin'].includes(A.screen)) render();
+    }, () => {});
+  A._unsubs.push(s1);
+
   // Groups
   const g1 = db.collection('groups')
     .where('memberUids', 'array-contains', uid)
@@ -5173,6 +5384,15 @@ function subscribeToData(uid) {
           const uid2 = uid;
           // Raw events — only things OTHER people did
           const rawEvents = [];
+          // Check for new simplification suggestions
+          (A.simplifications || []).forEach(s => {
+            const createdMs = s.createdAt?.toDate?.()?.getTime?.() || 0;
+            if (createdMs > lastOpenedMs && s.consents?.[uid2] === null) {
+              const others = s.participants.filter(p => p !== uid2)
+                .map(p => (s.participantNames||{})[p] || 'someone').join(' and ');
+              rawEvents.push({ eventType: 'simplification', otherName: others, amount: 0, claimId: s.id, status: 'pending_consent' });
+            }
+          });
           all.forEach(c => {
             const updatedMs = c.updatedAt?.toDate?.()?.getTime?.() || 0;
             if (updatedMs <= lastOpenedMs) return;
@@ -5232,6 +5452,7 @@ function subscribeToData(uid) {
               case 'marked_paid':text = c > 1 ? n+' says they\'ve paid you '+c+' debts ('+t+' total)' : n+' says they\'ve paid you '+fmt(g.amounts[0]); break;
               case 'settled':    text = c > 1 ? n+' confirmed '+c+' debts as settled ('+t+' total)' : 'Your '+fmt(g.amounts[0])+' debt to '+n+' is now confirmed as settled'; break;
               case 'cancelled':  text = c > 1 ? n+' withdrew '+c+' claims' : n+' withdrew a claim for '+fmt(g.amounts[0]); break;
+              case 'simplification': text = 'A debt simplification has been suggested involving you and '+n+' — tap to see it'; break;
               default:           text = 'Activity with '+n;
             }
             return { text, claimId: g.claimId, status: g.status, amount: g.total };
