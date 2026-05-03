@@ -629,6 +629,14 @@ if (messaging) {
    the last version they opened the app on.
 ================================================================ */
 const WHATS_NEW = {
+  'v1.8.8': {
+    title: 'Group improvements & account merging',
+    features: [
+      { icon: '&#128101;', heading: 'Group expense notifications', body: 'When someone adds an expense to a group you\'re in, you\'ll now get a notification so you\'re always up to date.' },
+      { icon: '&#128073;', heading: 'Leave a group', body: 'Non-creators can now leave a group they no longer want to be part of. The group stays for everyone else.' },
+      { icon: '&#128279;', heading: 'Smarter account setup', body: 'If you sign up with a new email but your phone number is already linked to an existing account, the app will now detect this and offer to merge your accounts so you don\'t lose any history.' }
+    ]
+  },
   'v1.8.7': {
     title: 'Debt simplification',
     features: [
@@ -657,7 +665,7 @@ const WHATS_NEW = {
   }
 };
 
-const APP_VERSION = 'v1.8.7';
+const APP_VERSION = 'v1.8.8';
 
 /* ================================================================
    APP STATE
@@ -676,6 +684,7 @@ const A = {
   needsDisplayName: false,
   mergeUid:       null,
   mergeName:      '',
+  mergeEmail:     '',
   _lastSentId:    null,
   confirmCancelId: null,
   _connNotFound:  false,
@@ -1638,7 +1647,13 @@ function renderReqDetail() {
     <div style="padding:16px 16px 0;">
       <div style="text-align:center;padding:16px 0 20px;">
         <div style="font-size:13px;color:var(--text-2);">
-          ${isIOU && iAmCreditor ? esc(claim.debtorName) + ' says they owe you' : esc(claim.creditorName) + ' says ' + (iAmDebtor ? 'you owe' : 'they are owed')}
+          ${claim.groupId
+            ? (iAmDebtor
+                ? 'Group settle-up: you owe ' + esc(claim.creditorName)
+                : 'Group settle-up: ' + esc(claim.debtorName) + ' owes you')
+            : isIOU && iAmCreditor
+              ? esc(claim.debtorName) + ' says they owe you'
+              : esc(claim.creditorName) + ' says ' + (iAmDebtor ? 'you owe' : 'they are owed')}
         </div>
         <div style="font-size:48px;font-weight:500;margin-top:4px;">${fmt(claim.amount)}</div>
         ${claim.status === 'queried'
@@ -3113,10 +3128,15 @@ function renderPending() {
           label = 'Waiting for ' + esc(c.creditorName) + ' to answer your question';
           sublabel = 'Tap to view';
         } else {
-          label = c.type === 'ioowe'
-            ? esc(c.debtorName) + ' has sent you an I Owe You'
-            : esc(c.creditorName) + ' has sent you a request';
-          sublabel = 'Tap to accept, query or reject';
+          if (c.groupId) {
+            label = 'Group settle-up: ' + esc(c.creditorName) + ' is owed ' + fmt(c.amount);
+            sublabel = 'Tap to accept, query or reject';
+          } else {
+            label = c.type === 'ioowe'
+              ? esc(c.debtorName) + ' has sent you an I Owe You'
+              : esc(c.creditorName) + ' has sent you a request';
+            sublabel = 'Tap to accept, query or reject';
+          }
         }
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
           + '<div class="avatar ' + (isReject ? '' : 'amber') + '">' + initials(other) + '</div>'
@@ -3147,11 +3167,15 @@ function renderPending() {
               : 'Waiting for ' + esc(waitingOn) + ' to answer your question')
           : c.status === 'queried' && c.counterAmount
           ? 'Waiting for ' + esc(c.creditorName) + ' to respond to your counter-offer'
+          : c.groupId
+          ? 'Group settle-up: waiting for ' + esc(otherName) + ' to respond'
           : 'Waiting for ' + esc(otherName) + ' to respond';
         const outSub = c.status === 'queried' && c.answeredQuestion
           ? 'Tap to read their reply'
           : c.status === 'queried' && c.counterAmount
           ? 'Tap to see their counter-offer'
+          : c.groupId
+          ? 'Tap to view (from group settle-up)'
           : 'Tap to view or cancel';
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
           + '<div class="avatar">' + initials(c.debtorName) + '</div>'
@@ -3992,6 +4016,20 @@ async function saveOnboardingPhone() {
   if (!rawOb) { go('home'); return; }
   const normalised = normalisePhone(rawOb);
   try {
+    // Check if phone already belongs to a different account
+    const existing = await db.collection('users_by_phone').doc(normalised).get();
+    if (existing.exists && existing.data().uid !== A.user.uid) {
+      // Phone is already on another account — show merge screen
+      const existingUid = existing.data().uid;
+      const existingDoc = await db.collection('users').doc(existingUid).get();
+      const existingEmail = existingDoc.exists ? (existingDoc.data().email || '') : '';
+      A.mergeUid   = existingUid;
+      A.mergeName  = existing.data().displayName || '';
+      A.mergeEmail = existingEmail;
+      A._pendingPhone = normalised;
+      go('merge_accounts');
+      return;
+    }
     const displayName = A.userDoc?.displayName || A.user?.displayName || '';
     await db.collection('users').doc(A.user.uid).update({ phone: normalised });
     await db.collection('users_by_phone').doc(normalised).set({ uid: A.user.uid, displayName });
@@ -4278,7 +4316,7 @@ function renderGroupDetail() {
       <div style="margin-left:auto;display:flex;gap:4px;align-items:center;">
         ${group.createdBy === uid ? `<button onclick="deleteOrCloseGroup('${group.id}')" style="background:none;border:none;cursor:pointer;padding:4px 8px;color:var(--text-3);" aria-label="Delete group" title="Delete group">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-        </button>` : ''}
+        </button>` : `<button onclick="leaveGroup('${group.id}')" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:12px;color:var(--text-3);" title="Leave group">Leave</button>`}
         <button onclick="go('group_expense')" style="background:none;border:none;font-size:22px;color:var(--green-600);cursor:pointer;padding:4px 8px;">+</button>
       </div>
     </div>
@@ -4312,14 +4350,68 @@ function computeGroupBalances(group) {
   return net;
 }
 
+// Computes group balances adjusted for exit claims already created for formerMembers.
+// Zeroes out formerMember balances (they don't participate in active settle-up)
+// and reduces active members' balances by any external payments they've already committed to.
+async function getGroupAdjustedBalances(group) {
+  const rawBalances = computeGroupBalances(group);
+  const formerMemberSet = new Set(group.formerMembers || []);
+  if (formerMemberSet.size === 0) return rawBalances;
+
+  // Query claims created from this group (exit claims and settle-up claims)
+  let exitClaims = [];
+  try {
+    const snap = await db.collection('claims')
+      .where('groupId', '==', group.id)
+      .get();
+    exitClaims = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+      .filter(c => c.status !== 'cancelled' && c.status !== 'rejected' && c.status !== 'settled');
+  } catch(e) {
+    console.warn('getGroupAdjustedBalances: could not query claims', e);
+    return rawBalances;
+  }
+
+  // Step 1: zero out formerMembers
+  const adj = { ...rawBalances };
+  formerMemberSet.forEach(uid => { if (adj[uid] !== undefined) adj[uid] = 0; });
+
+  // Step 2: for claims between a formerMember and an active member,
+  // adjust the active member's balance by the remaining amount
+  // (they'll pay/receive externally via the real claim)
+  const adjustments = {};
+  exitClaims.forEach(c => {
+    const credIsFormer = formerMemberSet.has(c.creditorUid);
+    const debIsFormer  = formerMemberSet.has(c.debtorUid);
+    const remaining = Math.max(0, (c.amount || 0) - (c.amountPaid || 0));
+    if (remaining < 0.01) return;
+    if (credIsFormer && !debIsFormer) {
+      // Active debtor will pay formerMember externally — reduce their active balance magnitude
+      adjustments[c.debtorUid] = (adjustments[c.debtorUid] || 0) + remaining;
+    } else if (debIsFormer && !credIsFormer) {
+      // Active creditor will receive from formerMember externally — reduce their active balance
+      adjustments[c.creditorUid] = (adjustments[c.creditorUid] || 0) + remaining;
+    }
+  });
+
+  Object.entries(adjustments).forEach(([uid, a]) => {
+    if (adj[uid] > 0)      adj[uid] = Math.max(0, adj[uid] - a);
+    else if (adj[uid] < 0) adj[uid] = Math.min(0, adj[uid] + a);
+  });
+
+  return adj;
+}
+
 async function previewSettleUp(groupId) {
   const group = (A.groups || []).find(g => g.id === groupId);
   if (!group) return;
   const uid = A.user?.uid;
-  const balances = computeGroupBalances(group);
+  const formerMemberSet = new Set(group.formerMembers || []);
 
-  // Generate minimal transfers
-  const transfers = minimizeCashFlow(balances, group);
+  // Use adjusted balances — accounts for exit claims already created, prevents double-counting
+  const balances = await getGroupAdjustedBalances(group);
+  const transfers = minimizeCashFlow(balances, group)
+    .filter(t => !formerMemberSet.has(t.from) && !formerMemberSet.has(t.to));
+
   if (transfers.length === 0) {
     showModal('Everyone is already square — nothing to settle!', [{ label: 'Great!', style: 'btn-green', action: () => {} }]);
     return;
@@ -4424,8 +4516,9 @@ async function deleteOrCloseGroup(groupId) {
     ]);
     return;
   }
-  const balances = computeGroupBalances(group);
-  const hasOutstanding = Object.values(balances).some(b => Math.abs(b) > 0.01);
+  const balances = await getGroupAdjustedBalances(group);
+  const formerMemberSet2 = new Set(group.formerMembers || []);
+  const hasOutstanding = Object.entries(balances).some(([uid, b]) => !formerMemberSet2.has(uid) && Math.abs(b) > 0.01);
   if (!hasOutstanding) {
     showModal('Everyone\'s all square in this group. Close and delete it?', [
       { label: 'Close group', style: 'btn-red', action: () => deleteGroup(groupId) },
@@ -4458,8 +4551,10 @@ async function settleAndCloseGroup(groupId) {
   const myName = A.userDoc?.displayName || 'Someone';
   const today2 = new Date().toISOString().split('T')[0];
   const groupName = group.name || 'group';
-  const balances = computeGroupBalances(group);
-  const transfers = minimizeCashFlow(balances, group);
+  const balances = await getGroupAdjustedBalances(group);
+  const formerMembers2 = new Set(group.formerMembers || []);
+  const allTransfers2 = minimizeCashFlow(balances, group);
+  const transfers = allTransfers2.filter(t => !formerMembers2.has(t.from) && !formerMembers2.has(t.to));
   if (transfers.length === 0) {
     await deleteGroup(groupId);
     return;
@@ -4508,6 +4603,112 @@ async function deleteGroup(groupId, silent) {
   } catch(e) {
     showToast('Could not delete group. Please try again.');
   }
+}
+
+async function leaveGroup(groupId) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const uid = A.user?.uid;
+  const myName = A.userDoc?.displayName || 'Someone';
+
+  // Compute transfers using adjusted balances — accounts for prior exit claims
+  const formerMemberSet = new Set(group.formerMembers || []);
+  const adjBalances = await getGroupAdjustedBalances(group);
+  const allTransfers = minimizeCashFlow(adjBalances, group);
+  // Only include transfers involving the leaving member AND not involving any formerMember
+  const myTransfers = allTransfers.filter(t =>
+    (t.from === uid || t.to === uid) &&
+    !formerMemberSet.has(t.from) &&
+    !formerMemberSet.has(t.to)
+  );
+
+  if (myTransfers.length === 0) {
+    // No outstanding balance — simple leave
+    const willBeAlone = (group.memberUids || []).length <= 2;
+    const aloneNote = willBeAlone ? '\n\nThis will leave ' + esc((group.memberNames || {})[group.createdBy] || 'the creator') + ' as the only member — they\'ll need to delete the group themselves.' : '';
+    showModal('Leave this group? You won\'t see it any more, but it will remain for the other members.\n\nNote: your balance is calculated based on current expenses. Any expenses added after you leave won\'t change what you owe.' + aloneNote, [
+      { label: 'Leave group', style: 'btn-red', action: () => doLeaveGroup(groupId, uid, []) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]);
+    return;
+  }
+
+  // Build member name map
+
+  showModal(
+    '<div>'
+    + '<div style="font-size:14px;font-weight:500;margin-bottom:8px;">Your group debts will become real claims</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">You have an outstanding balance in this group. To protect everyone, these will be converted to normal claims before you leave:</div>'
+    + myTransfers.map(t => {
+        const iMePay = t.from === uid;
+        const otherName = iMePay ? (memberNames[t.to] || t.toName || 'Unknown') : (memberNames[t.from] || t.fromName || 'Unknown');
+        const col = iMePay ? 'var(--red-600)' : 'var(--green-600)';
+        const text = iMePay ? 'You owe ' + esc(otherName) : esc(otherName) + ' owes you';
+        return '<div style="padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);margin-bottom:6px;display:flex;justify-content:space-between;">'
+          + '<span style="font-size:13px;">' + text + '</span>'
+          + '<span style="font-size:13px;font-weight:500;color:' + col + ';">' + fmt(t.amount) + '</span>'
+          + '</div>';
+      }).join('')
+    + '<div style="font-size:12px;color:var(--text-3);margin-top:6px;line-height:1.5;">These will appear in everyone\'s Pending tab.</div>'
+    + '</div>',
+    [
+      { label: 'Create claims & leave', style: 'btn-green', action: () => doLeaveGroup(groupId, uid, myTransfers) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]
+  );
+}
+
+async function doLeaveGroup(groupId, uid, transfers) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const myName = A.userDoc?.displayName || 'Someone';
+  const memberNames = group.memberNames || {};
+  const today2 = new Date().toISOString().split('T')[0];
+  try {
+    // Create real pending claims for each transfer involving this member
+    for (const t of transfers) {
+      const credName = t.to === uid ? myName : (memberNames[t.to] || t.toName || 'Unknown');
+      const debName  = t.from === uid ? myName : (memberNames[t.from] || t.fromName || 'Unknown');
+      await db.collection('claims').add({
+        creditorUid:  t.to,
+        creditorName: credName,
+        debtorUid:    t.from,
+        debtorName:   debName,
+        amount:       t.amount,
+        description:  'From group: ' + (group.name || 'group'),
+        status:       'pending',
+        type:         'eweome',
+        participants: [t.to, t.from],
+        date:         today2,
+        groupId:      groupId,
+        createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+      });
+      // Notify the other party to this specific claim
+      const otherUid = t.from === uid ? t.to : t.from;
+      sendPushNotification(otherUid, myName, 'left ' + (group.name || 'a group') + ' — a claim has been created');
+    }
+    // Notify any remaining group members who weren't involved in a direct claim
+    const notifiedAlready = new Set(transfers.map(t => t.from === uid ? t.to : t.from));
+    (group.memberUids || []).forEach(m => {
+      if (m !== uid && !notifiedAlready.has(m)) {
+        sendPushNotification(m, myName, 'has left ' + (group.name || 'the group'));
+      }
+    });
+    // Remove member from group, tracking them as a former member so settle-up doesn't duplicate their extracted claims
+    const newUids = (group.memberUids || []).filter(u => u !== uid);
+    const newNames = { ...(group.memberNames || {}) };
+    delete newNames[uid];
+    const formerMembers = [...new Set([...(group.formerMembers || []), uid])];
+    await db.collection('groups').doc(groupId).update({
+      memberUids: newUids,
+      memberNames: newNames,
+      formerMembers,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast(transfers.length > 0 ? 'Claims created and you\'ve left the group.' : 'You\'ve left the group.');
+    go('groups');
+  } catch(e) { showToast('Could not leave group. Please try again.'); }
 }
 
 function renderGroupNew() {
@@ -4682,6 +4883,12 @@ async function addGroupExpense() {
       expenses: firebase.firestore.FieldValue.arrayUnion(expense),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    // Notify all other group members
+    const myName = A.userDoc?.displayName || 'Someone';
+    const myUid = A.user?.uid;
+    (group.memberUids || []).forEach(uid => {
+      if (uid !== myUid) sendPushNotification(uid, myName, 'added an expense to ' + group.name + ': ' + desc + ' (' + fmt(amount) + ')');
+    });
     A._expenseSplit = 'equal';
     A._expenseIncluded = null;
     showToast('Expense added!');
@@ -4692,44 +4899,116 @@ async function addGroupExpense() {
 /* ================================================================
    MERGE ACCOUNTS
 ================================================================ */
+function maskEmail(email) {
+  if (!email) return '';
+  const [local, domain] = email.split('@');
+  if (!domain) return email;
+  const domainParts = domain.split('.');
+  const tld = domainParts.pop();
+  const domainName = domainParts.join('.');
+  const maskedLocal  = local.length <= 2  ? local[0] + '***'
+                     : local[0] + '***' + local[local.length - 1];
+  const maskedDomain = domainName.length <= 2 ? domainName[0] + '***'
+                     : domainName[0] + '***' + domainName[domainName.length - 1];
+  return maskedLocal + '@' + maskedDomain + '.' + tld;
+}
+
 function renderMergeAccounts() {
+  const hint = A.mergeEmail ? maskEmail(A.mergeEmail) : null;
   return `
-    <div class="signin-screen" style="padding:40px 24px;">
+    <div class="signin-screen" style="padding:40px 24px;gap:16px;">
       ${sheepSvg(60)}
       <div style="text-align:center;">
-        <div style="font-size:18px;font-weight:500;margin-bottom:8px;">We found an existing account</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:280px;">Your phone number matches an existing ewe-o-me account${A.mergeName ? ' (' + esc(A.mergeName) + ')' : ''}. Sign into that account instead?</p>
+        <div style="font-size:18px;font-weight:600;margin-bottom:10px;">Looks like you already have an account</div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:300px;">
+          That phone number is already linked to an existing ewe-o-me account.
+          ${hint ? 'It appears to be registered under:<br><strong style="color:var(--text-1);font-size:14px;">' + esc(hint) + '</strong>' : ''}
+        </p>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:300px;margin-top:8px;">
+          To avoid losing your history, we recommend merging into your existing account.
+          Since you've verified this phone number, no further confirmation is needed.
+        </p>
       </div>
-      <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
-        <button class="btn btn-green" style="padding:13px;" onclick="signIntoExistingAccount()">Yes, use my existing account</button>
-        <button class="btn btn-ghost" style="padding:11px;" onclick="keepNewAccount()">No, continue with this account</button>
+      <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-green" style="padding:13px;" onclick="signIntoExistingAccount()">Merge into my existing account</button>
+        <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="keepNewAccount()">Keep this as a separate account</button>
       </div>
+      <p style="font-size:11px;color:var(--text-3);text-align:center;max-width:280px;line-height:1.6;">
+        Merging will move all your claims, connections and history into your existing account. This can't be undone.
+      </p>
     </div>`;
 }
 
 async function signIntoExistingAccount() {
-  const phoneUser = auth.currentUser;
+  const currentUser = auth.currentUser;
+  const existingUid = A.mergeUid;
+  if (!existingUid) return;
   try {
-    const existingUid = A.mergeUid;
-    if (phoneUser && phoneUser.phoneNumber && existingUid) {
-      const pn = phoneUser.phoneNumber.replace(/\s/g,'');
-      const existingDoc = await db.collection('users').doc(existingUid).get();
-      const existingName = existingDoc.exists ? existingDoc.data().displayName : '';
-      await db.collection('users_by_phone').doc(pn).set({ uid: existingUid, displayName: existingName });
-      await db.collection('users').doc(existingUid).update({ phone: pn });
-      await db.collection('users').doc(phoneUser.uid).delete().catch(()=>{});
+    showToast('Merging accounts…');
+    const phone = A._pendingPhone || (currentUser?.phoneNumber || '').replace(/\s/g,'');
+    const existingDoc = await db.collection('users').doc(existingUid).get();
+    const existingName = existingDoc.exists ? existingDoc.data().displayName : '';
+
+    // Transfer claims from current account to existing account
+    if (currentUser && currentUser.uid !== existingUid) {
+      const asCred = await db.collection('claims').where('creditorUid','==',currentUser.uid).get();
+      const asDebt = await db.collection('claims').where('debtorUid','==',currentUser.uid).get();
+      const batch = db.batch();
+      asCred.docs.forEach(d => {
+        batch.update(d.ref, {
+          creditorUid: existingUid,
+          creditorName: existingName || d.data().creditorName,
+          participants: [existingUid, d.data().debtorUid],
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      asDebt.docs.forEach(d => {
+        batch.update(d.ref, {
+          debtorUid: existingUid,
+          debtorName: existingName || d.data().debtorName,
+          participants: [d.data().creditorUid, existingUid],
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      await batch.commit();
     }
-    A.mergeUid = null; A.mergeName = '';
+
+    // Link phone to existing account
+    if (phone) {
+      await db.collection('users_by_phone').doc(phone).set({ uid: existingUid, displayName: existingName });
+      await db.collection('users').doc(existingUid).update({ phone });
+    }
+
+    // Clean up the duplicate user doc and email lookup
+    if (currentUser && currentUser.uid !== existingUid) {
+      await db.collection('users').doc(currentUser.uid).delete().catch(() => {});
+      // Clean up users_by_email entry for the abandoned account
+      if (currentUser.email) {
+        await db.collection('users_by_email').doc(currentUser.email.toLowerCase()).delete().catch(() => {});
+      }
+    }
+
+    A.mergeUid = null; A.mergeName = ''; A.mergeEmail = ''; A._pendingPhone = null;
+
+    // In both cases, sign out and ask them to sign in with their existing account
     await auth.signOut();
     A.signinMode = 'choose';
-    showToast('Phone number linked! Please sign in with Google or email.');
+    showToast('Accounts merged! Please sign in with your existing account.');
     go('signin');
   } catch(e) {
-    showToast('Could not link accounts. Please sign in with Google instead.');
-    await auth.signOut(); go('signin');
+    console.error('Merge error:', e);
+    showToast('Could not merge accounts. Please try signing in with your existing account directly.');
+    await auth.signOut();
+    go('signin');
   }
 }
-async function keepNewAccount() { A.mergeUid=null; A.mergeName=''; await ensureUserDoc(A.user); subscribeToData(A.user.uid); go('home'); }
+
+async function keepNewAccount() {
+  A.mergeUid = null; A.mergeName = ''; A.mergeEmail = ''; A._pendingPhone = null;
+  await ensureUserDoc(A.user);
+  subscribeToData(A.user.uid);
+  go('home');
+}
 
 /* ================================================================
    WHATSAPP SHARING
@@ -4863,7 +5142,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.7</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.8</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -5404,7 +5683,15 @@ function subscribeToData(uid) {
             const isNew       = createdMs > lastOpenedMs;
             let eventType = null;
             if (isNew && !iAmSender) {
-              eventType = c.type === 'eweome' ? 'sent_yom' : 'sent_iou';
+              // Normal claim sent to me
+              if (c.groupId) {
+                eventType = 'group_claim_debtor';
+              } else {
+                eventType = c.type === 'eweome' ? 'sent_yom' : 'sent_iou';
+              }
+            } else if (isNew && iAmSender && c.groupId) {
+              // Group claim created on my behalf (I'm creditor but didn't send it)
+              eventType = 'group_claim_creditor';
             } else if (!isNew) {
               switch (c.status) {
                 case 'agreed':
@@ -5442,8 +5729,10 @@ function subscribeToData(uid) {
             const n = g.otherName, c = g.count, t = fmt(g.total);
             let text;
             switch (g.eventType) {
-              case 'sent_yom':   text = c > 1 ? n+' sent you '+c+' new requests totalling '+t : n+' sent you a YOM for '+fmt(g.amounts[0]); break;
-              case 'sent_iou':   text = c > 1 ? n+' logged '+c+' IOUs to you totalling '+t     : n+' logged an IOU to you for '+fmt(g.amounts[0]); break;
+              case 'sent_yom':          text = c > 1 ? n+' sent you '+c+' new requests totalling '+t : n+' sent you a YOM for '+fmt(g.amounts[0]); break;
+              case 'sent_iou':          text = c > 1 ? n+' logged '+c+' IOUs to you totalling '+t     : n+' logged an IOU to you for '+fmt(g.amounts[0]); break;
+              case 'group_claim_debtor':text = c > 1 ? 'Group settle-up: you owe '+n+' across '+c+' claims ('+t+' total)' : 'Group settle-up: you owe '+n+' '+fmt(g.amounts[0]); break;
+              case 'group_claim_creditor': text = c > 1 ? 'Group settle-up: '+c+' claims created on your behalf ('+t+' total owed to you)' : 'Group settle-up: '+n+' owes you '+fmt(g.amounts[0]); break;
               case 'accepted':   text = c > 1 ? n+' accepted '+c+' of your claims ('+t+' total)' : n+' accepted your claim for '+fmt(g.amounts[0]); break;
               case 'countered':  text = n+' has countered a claim'; break;
               case 'questioned': text = c > 1 ? n+' has questions about '+c+' claims' : n+' has a question about your claim'; break;
@@ -5483,6 +5772,11 @@ auth.onAuthStateChanged(async fbUser => {
       if (snap && snap.exists && snap.data().uid !== fbUser.uid) {
         A.mergeUid = snap.data().uid;
         A.mergeName = snap.data().displayName || '';
+        // Look up existing account email for the hint
+        try {
+          const existingDoc = await db.collection('users').doc(A.mergeUid).get();
+          A.mergeEmail = existingDoc.exists ? (existingDoc.data().email || '') : '';
+        } catch(e) { A.mergeEmail = ''; }
         go('merge_accounts');
         return;
       }
