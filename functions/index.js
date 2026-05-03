@@ -72,6 +72,11 @@ exports.linkPendingClaims = functions.firestore
   if (claimName && !/^\+?[\d\s\-()]+$/.test(claimName.trim())) return claimName;
   return phone;
 }
+        function bestName(appName, phone, claimName) {
+  if (appName && !/^\+?[\d\s\-()]+$/.test(appName.trim())) return appName;
+  if (claimName && !/^\+?[\d\s\-()]+$/.test(claimName.trim())) return claimName;
+  return phone;
+}
         batch.update(doc.ref, {
           debtorUid:    isCred ? uid : claim.debtorUid,
           debtorName:  isCred ? bestName(userData.displayName, phone, claim.debtorName)  : claim.debtorName,
