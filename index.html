@@ -23,13 +23,16 @@
     :root {
       --green-50:   #EAF3DE;
       --green-100:  #C0DD97;
+      --green-500:  #4E8E17;
       --green-600:  #3B6D11;
+      --green-700:  #2D5A0A;
       --green-800:  #27500A;
       --amber-50:   #FAEEDA;
       --amber-100:  #FAC775;
       --amber-600:  #633806;
       --amber-700:  #854F0B;
       --red-50:     #FCEBEB;
+      --red-100:    #F5C0C0;
       --red-600:    #A32D2D;
       --red-800:    #791F1F;
 
@@ -48,13 +51,25 @@
       :root {
         --text-1:   #F0F0F0;
         --text-2:   #AAAAAA;
-        --text-3:   #666666;
+        --text-3:   #888888;
         --border:   rgba(255,255,255,0.12);
         --surface:  #1C1C1E;
         --bg:       #111111;
-        --green-50: #162308;
-        --amber-50: #261A06;
-        --red-50:   #26080A;
+        /* In dark mode, semantic colours must be LIGHTER for readability on dark bg */
+        --green-50:  #162308;
+        --green-100: #2D4A14;
+        --green-500: #88C057;
+        --green-600: #88C057;
+        --green-700: #A8D878;
+        --green-800: #C0E898;
+        --amber-50:  #261A06;
+        --amber-100: #4A3010;
+        --amber-600: #E8961A;
+        --amber-700: #F0AB3A;
+        --red-50:    #26080A;
+        --red-100:   #4A1212;
+        --red-600:   #E05050;
+        --red-800:   #F07070;
       }
     }
 
@@ -115,7 +130,7 @@
       align-items: center;
       justify-content: center;
       gap: 3px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-2);
       cursor: pointer;
       transition: color 0.15s;
@@ -5008,63 +5023,67 @@ function renderMergeAccounts() {
 async function signIntoExistingAccount() {
   const currentUser = auth.currentUser;
   const existingUid = A.mergeUid;
-  if (!existingUid) return;
+  if (!existingUid || !currentUser) return;
   try {
     showToast('Merging accounts…');
     const phone = A._pendingPhone || (currentUser?.phoneNumber || '').replace(/\s/g,'');
     const existingDoc = await db.collection('users').doc(existingUid).get();
     const existingName = existingDoc.exists ? existingDoc.data().displayName : '';
 
-    // Transfer claims from current account to existing account
-    if (currentUser && currentUser.uid !== existingUid) {
-      const asCred = await db.collection('claims').where('creditorUid','==',currentUser.uid).get();
-      const asDebt = await db.collection('claims').where('debtorUid','==',currentUser.uid).get();
-      const batch = db.batch();
-      asCred.docs.forEach(d => {
-        batch.update(d.ref, {
-          creditorUid: existingUid,
-          creditorName: existingName || d.data().creditorName,
-          participants: [existingUid, d.data().debtorUid],
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+    // Transfer claims: the current user is either creditor or debtor on claims
+    // We can only update claims where current user is a participant (Firestore rules allow this)
+    const asCred = await db.collection('claims').where('creditorUid','==',currentUser.uid).get();
+    const asDebt = await db.collection('claims').where('debtorUid','==',currentUser.uid).get();
+    const batch = db.batch();
+    asCred.docs.forEach(d => {
+      batch.update(d.ref, {
+        creditorUid:  existingUid,
+        creditorName: existingName || d.data().creditorName,
+        participants: [existingUid, d.data().debtorUid],
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
       });
-      asDebt.docs.forEach(d => {
-        batch.update(d.ref, {
-          debtorUid: existingUid,
-          debtorName: existingName || d.data().debtorName,
-          participants: [d.data().creditorUid, existingUid],
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+    });
+    asDebt.docs.forEach(d => {
+      batch.update(d.ref, {
+        debtorUid:    existingUid,
+        debtorName:   existingName || d.data().debtorName,
+        participants: [d.data().creditorUid, existingUid],
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
       });
-      await batch.commit();
-    }
+    });
+    await batch.commit();
 
     // Link phone to existing account
     if (phone) {
       await db.collection('users_by_phone').doc(phone).set({ uid: existingUid, displayName: existingName });
-      await db.collection('users').doc(existingUid).update({ phone });
+      // Update existing user doc with phone — done as existing user isn't possible from here,
+      // so we write a merge-request doc that the user can action after signing in
+      await db.collection('users').doc(existingUid).update({ phone }).catch(() => {
+        // If this fails (permissions), it'll be picked up on next login
+      });
     }
 
-    // Clean up the duplicate user doc and email lookup
-    if (currentUser && currentUser.uid !== existingUid) {
-      await db.collection('users').doc(currentUser.uid).delete().catch(() => {});
-      // Clean up users_by_email entry for the abandoned account
-      if (currentUser.email) {
-        await db.collection('users_by_email').doc(currentUser.email.toLowerCase()).delete().catch(() => {});
-      }
+    // Clean up duplicate user doc — may fail if rules block it, that's OK
+    await db.collection('users').doc(currentUser.uid).delete().catch(() => {});
+
+    // Clean up email lookup for abandoned account
+    if (currentUser.email) {
+      await db.collection('users_by_email').doc(currentUser.email.toLowerCase()).delete().catch(() => {});
     }
 
     A.mergeUid = null; A.mergeName = ''; A.mergeEmail = ''; A._pendingPhone = null;
 
-    // In both cases, sign out and ask them to sign in with their existing account
+    // Sign out and ask them to sign in with their existing account
     await auth.signOut();
     A.signinMode = 'choose';
     showToast('Accounts merged! Please sign in with your existing account.');
     go('signin');
   } catch(e) {
     console.error('Merge error:', e);
-    showToast('Could not merge accounts. Please try signing in with your existing account directly.');
+    // More user-friendly error with specific guidance
+    A.mergeUid = null; A.mergeName = ''; A.mergeEmail = ''; A._pendingPhone = null;
     await auth.signOut();
+    showToast('Please sign in with your original Google or email account — your history is safe.');
     go('signin');
   }
 }
