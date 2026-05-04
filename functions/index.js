@@ -362,11 +362,12 @@ exports.detectSimplifications = functions.pubsub
       const simplified = minimizeCashFlow(netBalances);
       const simplifiedCount = simplified.length;
 
-      if (simplifiedCount >= currentCount) {
+      // Compare netted counts, not raw claim counts
+      const currentNettedCheck = minimizeCashFlow(netBalances).length;
+      if (simplifiedCount >= currentNettedCheck) {
         console.log('No improvement for group', groupUids, '- skipping');
         continue;
       }
-
       const participantKey = [...groupUids].sort().join(',');
       const existing = await db.collection('simplifications')
         .where('status', '==', 'pending_consent')
@@ -384,10 +385,13 @@ exports.detectSimplifications = functions.pubsub
         if (entry) participantNames[uid] = entry.name;
       });
 
-      const currentDebts = groupClaims.map(c => ({
-        from: c.debtorUid,
-        to: c.creditorUid,
-        amount: Math.max(0, (c.amount || 0) - (c.amountPaid || 0))
+// Use minimizeCashFlow for currentDebts too — shows netted transfers, not raw claims
+// This is what the UI displays as "Right now"
+      const currentTransfers = minimizeCashFlow(netBalances);
+      const currentDebts = currentTransfers.map(t => ({
+        from: t.from,
+        to: t.to,
+        amount: t.amount
       }));
 
       const proposedDebts = simplified.map(t => ({
@@ -399,11 +403,14 @@ exports.detectSimplifications = functions.pubsub
       const consents = {};
       groupUids.forEach(uid => { consents[uid] = null; });
 
+      // currentCount is now the NETTED transaction count, not raw claim count
+      const currentNettedCount = currentTransfers.length;
+
       const simplificationRef = await db.collection('simplifications').add({
         participants: groupUids,
         participantKey,
         participantNames,
-        currentTransactions: currentCount,
+        currentTransactions: currentNettedCount,
         simplifiedTransactions: simplifiedCount,
         currentDebts,
         proposedDebts,
