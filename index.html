@@ -1102,6 +1102,7 @@ function renderSignIn() {
           <input type="password" id="si-pass" class="input" placeholder="Password" aria-label="Password"/>
           <button class="google-btn" onclick="signInEmail(false)">Sign in</button>
           <button class="google-btn" onclick="signInEmail(true)">Create account</button>
+          <button style="background:none;border:none;font-size:13px;color:var(--green-600);cursor:pointer;text-decoration:underline;" onclick="forgotPassword()">Forgot password?</button>
           <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.signinMode='choose';render()">&#8592; Back</button>
         </div>` : ''}
       ${mode === 'phone' ? `
@@ -5493,6 +5494,24 @@ function normalisePhone(raw) {
   if (v.startsWith('00')) v = '+' + v.slice(2);
   if (v.startsWith('0')) v = '+44' + v.slice(1);
   return v;
+}
+
+async function forgotPassword() {
+  const email = document.getElementById('si-email')?.value?.trim();
+  if (!email) {
+    A.signinError = 'Please enter your email address first, then tap Forgot password.';
+    render(); return;
+  }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    A.signinError = '';
+    showToast('Password reset email sent to ' + email + ' — check your inbox.');
+  } catch(e) {
+    A.signinError = e.code === 'auth/user-not-found'
+      ? 'No account found with that email address.'
+      : 'Could not send reset email. Please check the address and try again.';
+    render();
+  }
 }
 
 async function signInEmail(isNew) {
