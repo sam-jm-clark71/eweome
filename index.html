@@ -2918,65 +2918,81 @@ function renderSimplificationDetail() {
   const simplifiedCount = simp.simplifiedTransactions || 0;
   const saving = currentCount - simplifiedCount;
 
-  // Build name map for participants
+  // Build name map — use participantNames, fall back to connections, then mask phone numbers
   const nameMap = {};
-  (simp.participantNames || {});
-  simp.participants.forEach((p, i) => {
-    nameMap[p] = (simp.participantNames || {})[p] || (p === uid ? (A.userDoc?.displayName || 'You') : 'Someone');
+  simp.participants.forEach(p => {
+    if (p === uid) { nameMap[p] = 'You'; return; }
+    const fromSimp = (simp.participantNames || {})[p];
+    const fromConn = (A.connections || []).find(c => (c.uid || c.id) === p)?.name;
+    const raw = fromSimp || fromConn || p;
+    nameMap[p] = /^\+?[\d\s\-()]{7,}$/.test(raw.trim()) ? 'Unknown' : raw;
   });
 
-  // Consent status summary
-  const waitingOn = simp.participants.filter(p => p !== uid && simp.consents?.[p] === null);
-  const agreedCount = simp.participants.filter(p => simp.consents?.[p] === true).length;
+  function debtRow(from, to, amount, highlight) {
+    const fromName = nameMap[from] || from;
+    const toName   = nameMap[to]   || to;
+    const isMe = from === uid || to === uid;
+    const bg  = isMe && highlight ? 'var(--green-50)' : 'var(--surface)';
+    const brd = isMe && highlight ? 'var(--green-100)' : 'var(--border)';
+    const col = highlight ? 'var(--green-600)' : 'var(--text-1)';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:' + bg + ';border-radius:var(--radius-sm);border:0.5px solid ' + brd + ';margin-bottom:6px;">'
+      + '<div style="flex:1;min-width:0;font-size:13px;">'
+      + '<strong>' + esc(fromName) + '</strong>'
+      + '<span style="color:var(--text-3);margin:0 5px;">owes</span>'
+      + '<strong>' + esc(toName) + '</strong>'
+      + '</div>'
+      + '<span style="font-size:14px;font-weight:600;color:' + col + ';flex-shrink:0;">' + fmt(amount) + '</span>'
+      + '</div>';
+  }
 
-  // SVG loop diagram — before
-  const beforeDiagram = buildLoopDiagram(simp.currentDebts || [], nameMap, uid, false);
-  // SVG simplified diagram — after
-  const afterDiagram  = buildLoopDiagram(simp.proposedDebts || [], nameMap, uid, true);
+  const beforeRows = (simp.currentDebts || []).map(d => debtRow(d.from, d.to, d.amount, false)).join('');
+  const afterRows  = (simp.proposedDebts || []).map(d => debtRow(d.from, d.to, d.amount, true)).join('');
+
+  const participantList = simp.participants.map(p => {
+    const c = simp.consents?.[p];
+    const name = nameMap[p] || 'Unknown';
+    const icon = c === true ? '&#10003;' : c === false ? '&#10007;' : '&#8230;';
+    const col  = c === true ? 'var(--green-600)' : c === false ? 'var(--red-600)' : 'var(--text-3)';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;">'
+      + '<span style="color:' + col + ';font-weight:600;width:18px;text-align:center;font-size:14px;">' + icon + '</span>'
+      + '<span style="font-size:13px;">' + esc(name) + '</span>'
+      + '</div>';
+  }).join('');
 
   return `
     <div class="screen-header">
       <button class="back-btn" onclick="go('home')" aria-label="Back">&#8249;</button>
       <span class="screen-title">Simplify debts</span>
     </div>
-    <div style="padding:16px;display:flex;flex-direction:column;gap:16px;">
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
 
       <div style="background:var(--green-50);border-radius:var(--radius-md);border:0.5px solid var(--green-100);padding:14px 16px;">
-        <div style="font-size:15px;font-weight:600;color:var(--green-700);margin-bottom:4px;">A simpler way to settle up &#9889;</div>
+        <div style="font-size:15px;font-weight:600;color:var(--green-700);margin-bottom:6px;">A simpler way to settle up &#9889;</div>
         <div style="font-size:13px;color:var(--green-700);line-height:1.6;">
-          There's a debt loop between ${simp.participants.map(p => p === uid ? 'you' : esc(nameMap[p])).join(', ')}.
-          Right now this needs <strong>${currentCount} payment${currentCount !== 1 ? 's' : ''}</strong>.
-          It could be simplified to just <strong>${simplifiedCount} payment${simplifiedCount !== 1 ? 's' : ''}</strong> — saving ${saving} step${saving !== 1 ? 's' : ''}.
+          There ${currentCount === 1 ? 'is' : 'are'} currently <strong>${currentCount} payment${currentCount !== 1 ? 's' : ''}</strong> needed.
+          This could be reduced to just <strong>${simplifiedCount} payment${simplifiedCount !== 1 ? 's' : ''}</strong> — saving ${saving} step${saving !== 1 ? 's' : ''}.
         </div>
       </div>
 
       <div>
         <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Right now</div>
-        ${beforeDiagram}
+        ${beforeRows || '<div style="font-size:13px;color:var(--text-3);padding:8px 0;">No outstanding debts.</div>'}
       </div>
 
       <div style="display:flex;align-items:center;gap:8px;color:var(--green-600);">
         <div style="flex:1;height:1px;background:var(--green-100);"></div>
-        <div style="font-size:13px;font-weight:500;">simplified to</div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">simplified to</div>
         <div style="flex:1;height:1px;background:var(--green-100);"></div>
       </div>
 
       <div>
         <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">After simplification</div>
-        ${afterDiagram}
+        ${afterRows || '<div style="font-size:13px;color:var(--green-600);padding:8px 0;">&#10003; No payments needed!</div>'}
       </div>
 
       <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;">
-        <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Everyone needs to agree</div>
-        <div style="font-size:12px;color:var(--text-2);line-height:1.6;">
-          ${simp.participants.map(p => {
-            const c = simp.consents?.[p];
-            const name = p === uid ? 'You' : esc(nameMap[p]);
-            const icon = c === true ? '&#10003;' : c === false ? '&#10007;' : '&#8230;';
-            const col  = c === true ? 'var(--green-600)' : c === false ? 'var(--red-600)' : 'var(--text-3)';
-            return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><span style="color:' + col + ';font-weight:600;width:16px;text-align:center;">' + icon + '</span><span>' + name + '</span></div>';
-          }).join('')}
-        </div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Everyone needs to agree</div>
+        ${participantList}
       </div>
 
       ${myConsent === null ? `
