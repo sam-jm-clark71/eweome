@@ -337,6 +337,11 @@
       gap: 5px;
       transition: transform 0.12s;
       -webkit-tap-highlight-color: transparent;
+      flex-shrink: 0;
+    }
+    @media (min-width: 480px) {
+      .circle-container { flex-direction: row !important; justify-content: center !important; gap: 32px !important; padding: 32px !important; }
+      .circle-btn { width: 190px !important; height: 190px !important; }
     }
     .circle-btn:active { transform: scale(0.93); }
     .circle-green { background: var(--green-100); }
@@ -1276,15 +1281,15 @@ function renderHome() {
         </div>
         <div style="color:var(--green-600);font-size:18px;">&#8250;</div>
       </div>` : ''}
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(12px,4vh,32px) 16px;gap:clamp(12px,4vh,32px);">
-      <button class="circle-btn circle-green ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('eweome')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(12px,4vh,32px) 16px;gap:clamp(12px,4vh,32px);" class="circle-container">
+      <button class="circle-btn circle-green ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('eweome')">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">${A.sheepMode ? 'EWE' : 'YOU'}</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">OWE</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">ME</span>
         </div>
       </button>
-      <button class="circle-btn circle-amber ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('ioowe')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
+      <button class="circle-btn circle-amber ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('ioowe')">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">I</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">OWE</span>
