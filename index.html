@@ -340,16 +340,13 @@
       flex-shrink: 0;
     }
     .circle-container {
+      display: flex;
       flex-direction: column;
-      justify-content: center;
       align-items: center;
+      justify-content: space-evenly;
       flex: 1;
-      gap: clamp(12px, 4vh, 32px);
-      padding: 16px;
-    }
-    .circle-btn {
-      width: min(42vw, 40vh, 190px) !important;
-      height: min(42vw, 40vh, 190px) !important;
+      padding: clamp(12px,4vh,32px) 16px;
+      gap: clamp(12px,4vh,32px);
     }
     .circle-btn:active { transform: scale(0.93); }
     .circle-green { background: var(--green-100); }
