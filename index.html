@@ -3,12 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>eweome</title>
+  <title>ewe-o-me</title>
+  <link rel="manifest" href="/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2222%22%20fill%3D%22%233B6D11%22%2F%3E%3Ctext%20x%3D%2250%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%20font-weight%3D%22900%22%20font-size%3D%2268%22%20fill%3D%22white%22%3Ee%3C%2Ftext%3E%3C%2Fsvg%3E">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="theme-color" content="#3B6D11">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="ewe-o-me">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta property="og:title" content="ewe-o-me">
+  <meta property="og:description" content="Log it. Track it. Settle it. — Track money between friends and family.">
+  <meta property="og:image" content="https://eweome-41e0f.web.app/icon-192.png">
 
   <!-- Firebase SDK (v9 compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -334,6 +341,19 @@
     .circle-btn:active { transform: scale(0.93); }
     .circle-green { background: var(--green-100); }
     .circle-amber { background: var(--amber-100); }
+    .sheep-circle {
+      border: 4px solid transparent !important;
+      box-shadow: 0 0 0 4px currentColor, 0 0 0 6px transparent,
+        0 0 0 8px currentColor, 0 0 0 10px transparent,
+        0 0 0 12px currentColor !important;
+      animation: woolly 3s ease-in-out infinite;
+    }
+    @keyframes woolly {
+      0%, 100% { border-radius: 50%; }
+      25% { border-radius: 48% 52% 51% 49% / 52% 48% 52% 48%; }
+      50% { border-radius: 46% 54% 48% 52% / 49% 51% 53% 47%; }
+      75% { border-radius: 52% 48% 54% 46% / 48% 52% 46% 54%; }
+    }
     .circle-label {
       font-size: 15px; font-weight: 500;
       text-align: center; max-width: 100px; line-height: 1.25;
@@ -514,6 +534,33 @@ window.addEventListener('load', () => {
   }, 2000);
 });
 
+// Refresh FCM token periodically — called on every app open after sign-in
+async function refreshFcmToken(uid) {
+  if (!uid) return;
+  // APK: use native bridge
+  if (window.AndroidBridge) {
+    try { window.AndroidBridge.saveFcmToken(uid); } catch(e) {}
+    return;
+  }
+  // Web push: refresh token if permission already granted
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+    }
+    if (!messaging) return;
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    if (token) {
+      // Only write if token has changed — avoid unnecessary Firestore writes
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (userDoc.exists && userDoc.data().fcmToken !== token) {
+        await db.collection('users').doc(uid).update({ fcmToken: token, fcmUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        console.log('FCM token refreshed');
+      }
+    }
+  } catch(e) { console.log('FCM token refresh failed:', e.message); }
+}
+
 window.saveNativeFcmToken = async function(uid, token) {
   if (!uid || !token) return;
   try {
@@ -631,6 +678,13 @@ if (messaging) {
    the last version they opened the app on.
 ================================================================ */
 const WHATS_NEW = {
+  'v1.8.9': {
+    title: 'Walkthrough guide & improvements',
+    features: [
+      { icon: '&#127981;', heading: 'New user guide', body: 'First-time users now get a 6-step walkthrough explaining YOMs, IOUs, Pending, My Position, Groups and notifications. You can replay it any time from Settings.' },
+      { icon: '&#128222;', heading: 'Better app invites', body: 'When you invite a new contact, Android users are now sent directly to the Play Store listing. The WhatsApp message also tries to open the WhatsApp app directly rather than the browser.' }
+    ]
+  },
   'v1.8.8': {
     title: 'Group improvements & account merging',
     features: [
@@ -667,7 +721,7 @@ const WHATS_NEW = {
   }
 };
 
-const APP_VERSION = 'v1.8.8';
+const APP_VERSION = 'v1.8.9';
 
 /* ================================================================
    APP STATE
@@ -687,6 +741,7 @@ const A = {
   mergeUid:       null,
   mergeName:      '',
   mergeEmail:     '',
+  _skipMergeCheck: false,
   _lastSentId:    null,
   confirmCancelId: null,
   _connNotFound:  false,
@@ -725,7 +780,10 @@ const A = {
   welcomeSeen: false,
   _helpOpen: {},
   activityDigest: [],
-  _activityChecked: false
+  _activityChecked: false,
+  _walkthroughStep: 0,
+  sheepMode: false,
+  _offline: false
 };
 
 /* ================================================================
@@ -735,6 +793,24 @@ function isIOS()     { return /iP(hone|ad|od)/.test(navigator.userAgent); }
 function isAndroid() { return /Android/.test(navigator.userAgent); }
 function isAPK()     { return !!window.AndroidBridge; }
 function isSafari()  { return /^((?!chrome|android).)*safari/i.test(navigator.userAgent); }
+// Load sheep mode preference on startup
+if (localStorage.getItem('eweome_sheep_mode') === '1') A.sheepMode = true;
+
+// Monitor online/offline status
+window.addEventListener('online',  () => { A._offline = false; render(); });
+window.addEventListener('offline', () => { A._offline = true;  render(); });
+
+function toggleSheepMode() {
+  A.sheepMode = !A.sheepMode;
+  localStorage.setItem('eweome_sheep_mode', A.sheepMode ? '1' : '0');
+  if (A.sheepMode) {
+    showToast('🐑 Baa! Sheep mode activated.');
+  } else {
+    showToast('Normal mode restored.');
+  }
+  render();
+}
+
 function copyToClipboard(text) {
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).then(() => showToast('Copied!')).catch(() => copyFallback(text));
@@ -955,7 +1031,7 @@ function render() {
   const selEnd = document.activeElement?.selectionEnd;
 
   const app = document.getElementById('app');
-  const showNav = !['loading','signin','welcome','activity_digest','whats_new'].includes(A.screen);
+  const showNav = !['loading','signin','welcome','activity_digest','whats_new','walkthrough'].includes(A.screen);
   const pendingCount = A.pendingClaims.length;
 
   const content = {
@@ -997,6 +1073,7 @@ function render() {
     edit_note:       renderEditNote,
     welcome:         renderWelcome,
     whats_new:       renderWhatsNew,
+    walkthrough:     renderWalkthrough,
     activity_digest: renderActivityDigest,
     partial_payment: renderPartialPayment,
     simplification_detail: renderSimplificationDetail,
@@ -1020,13 +1097,17 @@ function render() {
     }
   };
 
+  const offlineBanner = A._offline
+    ? '<div style="background:#333;color:#fff;font-size:12px;text-align:center;padding:6px 16px;letter-spacing:0.02em;">&#128268; No internet connection</div>'
+    : '';
+
   if (!showNav) {
-    app.innerHTML = content();
+    app.innerHTML = offlineBanner + content();
     restoreFocus();
     return;
   }
 
-  app.innerHTML = `
+  app.innerHTML = offlineBanner + `
     <div class="screen" style="${['home'].includes(A.screen)?'display:flex;flex-direction:column;':''}">${content()}</div>
     <nav class="bottom-nav" aria-label="Main navigation">
       <button class="nav-item ${HOME_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('home')">
@@ -1108,7 +1189,7 @@ function renderSignIn() {
       ${mode === 'phone' ? `
         <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
           ${A.phoneStep === 'code' ? `
-            <p style="font-size:13px;color:var(--text-2);text-align:center;">Enter the code sent to ${esc(A.phoneNumber)}</p>
+            <p style="font-size:13px;color:var(--text-2);text-align:center;line-height:1.6;">Enter the code sent to ${esc(A.phoneNumber)}<br><span style="font-size:12px;color:var(--text-3);">No code within 30 seconds? Check your spam folder.</span></p>
             <input type="text" id="si-code" class="input" placeholder="6-digit code" inputmode="numeric" maxlength="6" aria-label="Verification code"/>
             <button class="google-btn" onclick="verifyCode()">Verify</button>
             <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.phoneStep='number';render()">&#8592; Back</button>
@@ -1130,7 +1211,7 @@ function renderHome() {
   checkDueClaims();
   const hp = A.pendingClaims.length > 0;
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  const showIOSBanner = isIOS() && !isStandalone && !sessionStorage.getItem('ios_banner_dismissed');
+  const showIOSBanner = isIOS() && !isStandalone && !localStorage.getItem('ios_install_dismissed');
   const showNotifPrompt = !isAPK() && !isIOS() && 'Notification' in window 
     && Notification.permission === 'default' 
     && !sessionStorage.getItem('notif_prompt_dismissed');
@@ -1160,13 +1241,31 @@ function renderHome() {
         </div>
       </div>` : ''}
     ${showIOSBanner ? `
-      <div style="margin:0 16px 4px;padding:11px 13px;background:#EEF5FF;border-radius:var(--radius-sm);border:0.5px solid #B8D4F0;display:flex;align-items:flex-start;gap:10px;">
-        <div style="font-size:18px;">&#128241;</div>
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:500;margin-bottom:2px;">Tip: add to your home screen</div>
-          <div style="font-size:12px;color:var(--text-2);line-height:1.5;">In Safari, tap &#11014; then <strong>Add to Home Screen</strong> for the best experience.</div>
+      <div style="margin:0 16px 8px;padding:14px;background:linear-gradient(135deg,#EEF5FF,#E8F0FF);border-radius:var(--radius-md);border:0.5px solid #B8D4F0;">
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+          <div style="font-size:22px;flex-shrink:0;">&#128241;</div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px;color:#1a3a6e;">Install ewe-o-me on your iPhone</div>
+            <div style="font-size:12px;color:#2a4a8e;line-height:1.5;">For the best experience — including push notifications — install it as an app. It takes 10 seconds:</div>
+          </div>
+          <button onclick="localStorage.setItem('ios_install_dismissed','1');render()" style="background:none;border:none;font-size:16px;color:#6699cc;cursor:pointer;padding:0;flex-shrink:0;">&#215;</button>
         </div>
-        <button onclick="sessionStorage.setItem('ios_banner_dismissed','1');render()" style="background:none;border:none;font-size:18px;color:var(--text-3);cursor:pointer;padding:0;">&#215;</button>
+        <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:#1a3a6e;">
+          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:18px;">&#11014;&#65039;</div>
+            <div style="font-size:11px;margin-top:2px;">Tap <strong>Share</strong></div>
+          </div>
+          <div style="font-size:16px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:18px;">&#10133;</div>
+            <div style="font-size:11px;margin-top:2px;"><strong>Add to Home</strong> Screen</div>
+          </div>
+          <div style="font-size:16px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:18px;">&#9989;</div>
+            <div style="font-size:11px;margin-top:2px;">Tap <strong>Add</strong></div>
+          </div>
+        </div>
       </div>` : ''}
     ${(A.simplifications||[]).length > 0 ? `
       <div style="margin:0 16px 4px;padding:11px 13px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openSimplification('${A.simplifications[0].id}')">
@@ -1178,18 +1277,18 @@ function renderHome() {
         <div style="color:var(--green-600);font-size:18px;">&#8250;</div>
       </div>` : ''}
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(12px,4vh,32px) 16px;gap:clamp(12px,4vh,32px);">
-      <button class="circle-btn circle-green" onclick="startClaim('eweome')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
+      <button class="circle-btn circle-green ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('eweome')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
-          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">YOU</span>
+          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">${A.sheepMode ? 'EWE' : 'YOU'}</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">OWE</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">ME</span>
         </div>
       </button>
-      <button class="circle-btn circle-amber" onclick="startClaim('ioowe')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
+      <button class="circle-btn circle-amber ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('ioowe')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">I</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">OWE</span>
-          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">YOU</span>
+          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">${A.sheepMode ? 'EWE' : 'YOU'}</span>
         </div>
       </button>
     </div>`;
@@ -2631,7 +2730,14 @@ function renderPosition() {
     </div>
     <hr class="divider">
     ${items.length === 0
-      ? `<div class="empty" style="padding:32px 28px;">All square &mdash; no outstanding debts.</div>`
+      ? A.settled && A.settled.length > 0
+        ? `<div class="empty" style="padding:32px 28px;">All square — no outstanding debts. &#10003;</div>`
+        : `<div style="padding:32px 24px;text-align:center;">
+            <div style="font-size:40px;margin-bottom:14px;">&#9878;</div>
+            <div style="font-size:16px;font-weight:500;margin-bottom:8px;">Nothing here yet</div>
+            <div style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:20px;">Once you've sent or received a claim and it's been agreed, your balance with that person will appear here.</div>
+            <button class="btn btn-green" style="padding:12px 20px;" onclick="startClaim('eweome')">Send your first YOM</button>
+          </div>`
       : items.map(i => `
           <div class="list-item" onclick="viewPersonPos('${esc(i.id)}')">
             <div class="avatar ${i.color || ''}">${initials(i.name)}</div>
@@ -3318,14 +3424,100 @@ function renderWelcome() {
 function dismissWelcome(goToHelp) {
   A.welcomeSeen = true;
   localStorage.setItem('eweome_welcome_seen', '1');
-  // Also mark current version as seen so What's New doesn't immediately appear
   localStorage.setItem('eweome_last_seen_version', APP_VERSION);
-  go(goToHelp ? 'help' : 'home');
+  if (goToHelp) { go('help'); return; }
+  // Offer walkthrough to new users
+  go('walkthrough');
 }
 
 /* ================================================================
-   WHAT'S NEW SCREEN
+   WALKTHROUGH
 ================================================================ */
+const WALKTHROUGH_STEPS = [
+  {
+    icon: '&#128178;',
+    title: 'You Owe Me (YOM)',
+    body: 'Tap the big green button to send a YOM — "You Owe Me." Use this when someone owes YOU money. Enter who, how much, and what for. They\'ll get a notification and can accept, query, or reject it.',
+    tip: 'The green button = money coming TO you.'
+  },
+  {
+    icon: '&#128176;',
+    title: 'I Owe You (IOU)',
+    body: 'Tap the amber button to log an IOU — "I Owe You." Use this when YOU owe someone else money. Same flow — just the other direction. The other person will see it in their Pending tab.',
+    tip: 'The amber button = money going FROM you.'
+  },
+  {
+    icon: '&#9989;',
+    title: 'Pending',
+    body: 'The Pending tab shows everything that needs action. "Action needed" = claims sent to you that you haven\'t responded to yet. "Waiting on them" = claims you\'ve sent that they haven\'t responded to yet.',
+    tip: 'A yellow dot on Pending means something needs your attention.'
+  },
+  {
+    icon: '&#128200;',
+    title: 'My Position',
+    body: 'The My Position tab shows your overall balance with each person — how much you\'re owed and how much you owe, all in one place. Tap any person to see the full history of claims between you.',
+    tip: 'Green = they owe you. Red = you owe them.'
+  },
+  {
+    icon: '&#128101;',
+    title: 'Groups',
+    body: 'Going on a trip or splitting regular costs? Create a group, add expenses as you go (split equally or custom amounts), and use Settle Up when you\'re done. The app works out the minimum number of payments needed.',
+    tip: 'Groups are great for holidays, shared houses, or any shared expense.'
+  },
+  {
+    icon: '&#128276;',
+    title: 'Notifications',
+    body: 'You\'ll get a push notification whenever something happens — a new claim, an acceptance, a question, a payment. Tap the notification to open the app and you\'ll see a summary of everything that happened since you were last here.',
+    tip: 'Make sure notifications are enabled so you never miss anything.'
+  }
+];
+
+function renderWalkthrough() {
+  const step = Math.min(A._walkthroughStep || 0, WALKTHROUGH_STEPS.length - 1);
+  const s = WALKTHROUGH_STEPS[step];
+  const total = WALKTHROUGH_STEPS.length;
+  const isLast = step === total - 1;
+
+  const dots = WALKTHROUGH_STEPS.map((_, i) =>
+    '<div style="width:' + (i === step ? '20' : '8') + 'px;height:8px;border-radius:4px;background:' +
+    (i === step ? 'var(--green-600)' : 'var(--border)') + ';transition:width 0.2s;"></div>'
+  ).join('');
+
+  return `
+    <div class="signin-screen" style="padding:40px 24px 32px;gap:0;justify-content:space-between;min-height:100%;">
+      <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px;max-width:320px;">
+        <div style="font-size:56px;line-height:1;">${s.icon}</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text-1);">${esc(s.title)}</div>
+        <div style="font-size:14px;color:var(--text-2);line-height:1.7;">${esc(s.body)}</div>
+        <div style="background:var(--green-50);border-radius:var(--radius-sm);padding:10px 14px;border:0.5px solid var(--green-100);">
+          <div style="font-size:12px;color:var(--green-700);line-height:1.5;">&#128161; ${esc(s.tip)}</div>
+        </div>
+      </div>
+      <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;justify-content:center;gap:6px;align-items:center;padding:8px 0;">${dots}</div>
+        <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="walkthroughNext()">
+          ${isLast ? 'Get started &#10003;' : 'Next &#8250;'}
+        </button>
+        <button style="background:none;border:none;font-size:13px;color:var(--text-3);cursor:pointer;padding:6px;" onclick="dismissWalkthrough()">Skip guide</button>
+      </div>
+    </div>`;
+}
+
+function walkthroughNext() {
+  const next = (A._walkthroughStep || 0) + 1;
+  if (next >= WALKTHROUGH_STEPS.length) {
+    dismissWalkthrough();
+  } else {
+    A._walkthroughStep = next;
+    render();
+  }
+}
+
+function dismissWalkthrough() {
+  A._walkthroughStep = 0;
+  localStorage.setItem('eweome_walkthrough_seen', '1');
+  go('home');
+}
 function hasNewFeaturesToShow() {
   const lastSeen = localStorage.getItem('eweome_last_seen_version');
   if (!lastSeen) return false; // brand new user — they get the welcome screen instead
@@ -4152,7 +4344,7 @@ function renderAllConnections() {
         oninput="A._connSearch=this.value;render()"
         autocomplete="off" style="margin:0;"/>
     </div>
-    <div id="conn-results">${rows || '<div style="padding:24px;text-align:center;font-size:13px;color:var(--text-2);">No connections yet.</div>'}</div>
+    <div id="conn-results">${rows || '<div style="padding:32px 24px;text-align:center;"><div style="font-size:36px;margin-bottom:12px;">&#128101;</div><div style="font-size:15px;font-weight:500;margin-bottom:8px;">No connections yet</div><div style="font-size:13px;color:var(--text-2);line-height:1.7;">People you send claims to or receive claims from will appear here automatically.</div></div>'}</div>
     <div style="padding:12px 16px;">
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A.claim.type=null;go('new_conn')">+ Add connection</button>
     </div>`;
@@ -5059,6 +5251,7 @@ async function signIntoExistingAccount() {
     }
 
     A.mergeUid = null; A.mergeName = ''; A.mergeEmail = ''; A._pendingPhone = null;
+    A._skipMergeCheck = true; // prevent onAuthStateChanged re-triggering merge on next fire
 
     // Sign out and ask them to sign in with their existing account
     await auth.signOut();
@@ -5069,6 +5262,7 @@ async function signIntoExistingAccount() {
     console.error('Merge error:', e);
     // More user-friendly error with specific guidance
     A.mergeUid = null; A.mergeName = ''; A.mergeEmail = ''; A._pendingPhone = null;
+    A._skipMergeCheck = true;
     await auth.signOut();
     showToast('Please sign in with your original Google or email account — your history is safe.');
     go('signin');
@@ -5085,9 +5279,24 @@ async function keepNewAccount() {
 /* ================================================================
    WHATSAPP SHARING
 ================================================================ */
+function getAppLink() {
+  return isAPK()
+    ? 'https://play.google.com/store/apps/details?id=com.eweome.app'
+    : 'https://eweome-41e0f.web.app';
+}
+
 function inviteContact(name) {
-  const text = (name?name+', ':'') + "I'd like to add you on ewe-o-me, an app for tracking who owes what. Join: https://eweome-41e0f.web.app";
-  if (navigator.share) navigator.share({text}).catch(()=>{}); else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+  const appLink = getAppLink();
+  const storeHint = isAPK() ? ' (free on Google Play)' : '';
+  const text = (name ? name + ', ' : '') + "I'd like to add you on ewe-o-me, an app for tracking who owes what. Join here" + storeHint + ': ' + appLink;
+  if (isAPK()) {
+    const intentUrl = 'intent://send?text=' + encodeURIComponent(text) + '#Intent;package=com.whatsapp;scheme=whatsapp;end';
+    window.location.href = intentUrl;
+  } else if (navigator.share) {
+    navigator.share({ text }).catch(() => {});
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
 }
 
 function buildShareText(claim, isNewContact) {
@@ -5097,7 +5306,8 @@ function buildShareText(claim, isNewContact) {
   const desc = claim.description || '';
   const date = claim.date ? fmtDate(claim.date) : '';
   const onAcct = claim.onAccount ? ' There\'s no rush to pay.' : '';
-  const appUrl = 'https://eweome-41e0f.web.app';
+  const appLink = getAppLink();
+  const storeHint = isAPK() ? ' (free on Google Play)' : '';
 
   if (isNewContact) {
     // Wordy intro version for people who may not have the app
@@ -5110,7 +5320,7 @@ function buildShareText(claim, isNewContact) {
       + `I'm using an app called ewe-o-me to keep track of money between friends and family — it makes it easy to log debts, agree amounts, and mark things as settled when they're paid. No payments go through the app, it's just a shared record.
 
 `
-      + `It would be great if you joined too so we can keep track of this together: ${appUrl}`;
+      + `It would be great if you joined too so we can keep track of this together: ${appLink}${storeHint}`;
   } else {
     // Short version for existing contacts
     const direction = io
@@ -5125,18 +5335,25 @@ function buildShareText(claim, isNewContact) {
 function shareViaSystem(claimId) {
   const all=[...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
   const claim=all.find(c=>c.id===claimId); if(!claim) return;
-  // Check if recipient is an existing connection
   const recipientUid = claim.type==='ioowe' ? claim.creditorUid : claim.debtorUid;
   const isNew = !(A.connections||[]).some(c => c.id === recipientUid);
   const text=buildShareText(claim, isNew);
-  // Use direct WhatsApp link if we have the recipient's phone
   const conn = (A.connections||[]).find(c => c.uid === recipientUid || c.id === recipientUid);
-  const recipientPhone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') : 
+  const recipientPhone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') :
     (claim.pendingPhone ? claim.pendingPhone.replace(/[^\d+]/g,'') : null);
-  const waUrl = recipientPhone 
-    ? 'https://wa.me/' + recipientPhone + '?text=' + encodeURIComponent(text)
-    : 'https://wa.me/?text=' + encodeURIComponent(text);
-  if(navigator.share) navigator.share({text}).catch(()=>{}); else window.open(waUrl,'_blank');
+  if (isAPK()) {
+    // Android: open WhatsApp app directly
+    const intentUrl = 'intent://send' + (recipientPhone ? '?phone=' + recipientPhone + '&' : '?') +
+      'text=' + encodeURIComponent(text) + '#Intent;package=com.whatsapp;scheme=whatsapp;end';
+    window.location.href = intentUrl;
+  } else if (navigator.share) {
+    navigator.share({ text }).catch(() => {});
+  } else {
+    const waUrl = recipientPhone
+      ? 'https://wa.me/' + recipientPhone + '?text=' + encodeURIComponent(text)
+      : 'https://wa.me/?text=' + encodeURIComponent(text);
+    window.open(waUrl, '_blank');
+  }
 }
 
 /* ================================================================
@@ -5214,7 +5431,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.8</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.8.9</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -5251,6 +5468,8 @@ function renderSettings() {
       <div style="font-size:15px;margin-bottom:6px;">Export my data</div>
       <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">Download a plain-text summary of all your claims — useful as a personal record or backup.</p>
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="exportMyData()">&#128229; Download my data</button>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A._walkthroughStep=0;go('walkthrough')">&#127981; Replay the guide</button>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="toggleSheepMode()">${A.sheepMode ? '🐑 Restore normal mode' : '🐑 Make it a bit more sheep-y'}</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:6px;">Bank details</div>
@@ -5534,7 +5753,7 @@ async function signInPhone() {
     if (!A._phoneVerifier) A._phoneVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
     A.phoneNumber = phone;
     A._confirmResult = await auth.signInWithPhoneNumber(phone, A._phoneVerifier);
-    A.phoneStep = 'code'; render();
+    A.phoneStep = 'code'; A.signinError = ''; A._smsSent = true; render();
   } catch(e) { A.signinError = 'Could not send code. Check the number and try again.'; A._phoneVerifier = null; render(); }
 }
 
@@ -5747,11 +5966,8 @@ function subscribeToData(uid) {
       if (!A._activityChecked) {
         A._activityChecked = true;
         const lastOpenedMs = parseInt(localStorage.getItem('eweome_last_opened') || '0', 10);
-        // Update last opened NOW so next session sees this session's activity
-        localStorage.setItem('eweome_last_opened', Date.now().toString());
         if (lastOpenedMs > 0) {
           const uid2 = uid;
-          // Raw events — only things OTHER people did
           const rawEvents = [];
           // Check for new simplification suggestions
           (A.simplifications || []).forEach(s => {
@@ -5839,10 +6055,13 @@ function subscribeToData(uid) {
 
           if (digest.length > 0) {
             A.activityDigest = digest;
+            localStorage.setItem('eweome_last_opened', Date.now().toString());
             go('activity_digest');
             return;
           }
         }
+        // Nothing to show — update timestamp now
+        localStorage.setItem('eweome_last_opened', Date.now().toString());
       }
 
       if (!['loading','signin'].includes(A.screen)) render();
@@ -5856,13 +6075,12 @@ function subscribeToData(uid) {
 auth.onAuthStateChanged(async fbUser => {
   if (fbUser) {
     A.user = fbUser;
-    if (fbUser.phoneNumber && !fbUser.email) {
+    if (fbUser.phoneNumber && !fbUser.email && !A._skipMergeCheck) {
       const pn = fbUser.phoneNumber.replace(/\s/g,'');
       const snap = await db.collection('users_by_phone').doc(pn).get().catch(() => null);
       if (snap && snap.exists && snap.data().uid !== fbUser.uid) {
         A.mergeUid = snap.data().uid;
         A.mergeName = snap.data().displayName || '';
-        // Look up existing account email for the hint
         try {
           const existingDoc = await db.collection('users').doc(A.mergeUid).get();
           A.mergeEmail = existingDoc.exists ? (existingDoc.data().email || '') : '';
@@ -5871,9 +6089,11 @@ auth.onAuthStateChanged(async fbUser => {
         return;
       }
     }
+    A._skipMergeCheck = false; // reset after successful pass
     await ensureUserDoc(fbUser);
     subscribeToData(fbUser.uid);
     requestNotificationPermission(fbUser.uid);
+    refreshFcmToken(fbUser.uid); // refresh token on every open, not just first time
     if (window.AndroidBridge) {
       try { window.AndroidBridge.saveFcmToken(fbUser.uid); }
       catch(e) { console.log('FCM bridge call failed:', e); }
