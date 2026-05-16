@@ -99,6 +99,9 @@
       -webkit-overflow-scrolling: touch;
       padding-bottom: 72px;
     }
+    /* In Safari browser (not installed PWA), add extra padding for the toolbar */
+    body.safari-browser .screen { padding-bottom: 160px; }
+    body.safari-browser .bottom-nav { bottom: env(safe-area-inset-bottom, 80px); }
 
     /* ================================================================
        BOTTOM NAV
@@ -352,12 +355,12 @@
     .circle-green { background: var(--green-100); }
     .circle-amber { background: var(--amber-100); }
     .sheep-circle {
-      border: 4px solid transparent !important;
-      box-shadow: 0 0 0 4px currentColor, 0 0 0 6px transparent,
-        0 0 0 8px currentColor, 0 0 0 10px transparent,
-        0 0 0 12px currentColor !important;
       animation: woolly 3s ease-in-out infinite;
+      outline: 3px dashed rgba(0,0,0,0.15) !important;
+      outline-offset: 4px;
     }
+    .circle-green.sheep-circle { outline-color: rgba(59,109,17,0.35) !important; }
+    .circle-amber.sheep-circle { outline-color: rgba(99,56,6,0.25) !important; }
     @keyframes woolly {
       0%, 100% { border-radius: 50%; }
       25% { border-radius: 48% 52% 51% 49% / 52% 48% 52% 48%; }
@@ -688,6 +691,13 @@ if (messaging) {
    the last version they opened the app on.
 ================================================================ */
 const WHATS_NEW = {
+  'v1.9.0': {
+    title: 'iOS improvements & fixes',
+    features: [
+      { icon: '&#128241;', heading: 'Better iOS experience', body: 'Fixed the layout in Safari on iPhone so the bottom navigation bar no longer gets covered by the browser toolbar. The install guide now also shows the correct steps for modern iOS.' },
+      { icon: '&#9889;', heading: 'IOU button label fixed', body: 'The confirm screen for an IOU now correctly says "Send IOU" rather than "Send claim".' }
+    ]
+  },
   'v1.8.9': {
     title: 'Walkthrough guide & improvements',
     features: [
@@ -731,7 +741,7 @@ const WHATS_NEW = {
   }
 };
 
-const APP_VERSION = 'v1.8.9';
+const APP_VERSION = 'v1.9.0';
 
 /* ================================================================
    APP STATE
@@ -805,6 +815,11 @@ function isAPK()     { return !!window.AndroidBridge; }
 function isSafari()  { return /^((?!chrome|android).)*safari/i.test(navigator.userAgent); }
 // Load sheep mode preference on startup
 if (localStorage.getItem('eweome_sheep_mode') === '1') A.sheepMode = true;
+
+// Detect Safari browser (not standalone PWA) and add body class for layout adjustments
+if (isIOS() && !window.navigator.standalone) {
+  document.body.classList.add('safari-browser');
+}
 
 // Monitor online/offline status
 window.addEventListener('online',  () => { A._offline = false; render(); });
@@ -1258,17 +1273,22 @@ function renderHome() {
         </div>
         <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:#1a3a6e;">
           <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
-            <div style="font-size:18px;">&#11014;&#65039;</div>
+            <div style="font-size:16px;">&#8226;&#8226;&#8226;</div>
+            <div style="font-size:11px;margin-top:2px;">Tap <strong>•••</strong></div>
+          </div>
+          <div style="font-size:16px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:16px;">&#11014;&#65039;</div>
             <div style="font-size:11px;margin-top:2px;">Tap <strong>Share</strong></div>
           </div>
           <div style="font-size:16px;color:#B8D4F0;">›</div>
           <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
-            <div style="font-size:18px;">&#10133;</div>
+            <div style="font-size:16px;">&#10133;</div>
             <div style="font-size:11px;margin-top:2px;"><strong>Add to Home</strong> Screen</div>
           </div>
           <div style="font-size:16px;color:#B8D4F0;">›</div>
           <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
-            <div style="font-size:18px;">&#9989;</div>
+            <div style="font-size:16px;">&#9989;</div>
             <div style="font-size:11px;margin-top:2px;">Tap <strong>Add</strong></div>
           </div>
         </div>
@@ -1621,7 +1641,7 @@ function renderConfirm() {
         ${msg}<br>
         They'll be notified and can accept, query, or reject.
       </p>
-      <button class="btn btn-green" style="padding:14px;" onclick="sendClaim()">Send claim</button>
+      <button class="btn btn-green" style="padding:14px;" onclick="sendClaim()">${A.claim?.type === 'ioowe' ? 'Send IOU' : 'Send claim'}</button>
     </div>`;
 }
 
@@ -5437,7 +5457,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.9</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.9.0</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
