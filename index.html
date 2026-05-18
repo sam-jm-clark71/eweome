@@ -101,7 +101,16 @@
     }
     /* In Safari browser (not installed PWA), add extra padding for the toolbar */
     body.safari-browser .screen { padding-bottom: 160px; }
-    body.safari-browser .bottom-nav { bottom: env(safe-area-inset-bottom, 80px); }
+    body.safari-browser .bottom-nav {
+      bottom: 0;
+      padding-bottom: max(env(safe-area-inset-bottom, 0px), 80px);
+      height: auto;
+      min-height: 64px;
+    }
+    body.safari-browser .circle-btn {
+      width: min(55vw, 28vh, 180px) !important;
+      height: min(55vw, 28vh, 180px) !important;
+    }
 
     /* ================================================================
        BOTTOM NAV
