@@ -9,9 +9,8 @@ const messaging = admin.messaging();
 // DEBT SIMPLIFICATION HELPERS
 // ================================================================
 
-// Build net balance map from a list of claims
 function buildNetBalances(claims) {
-  const net = {}; // uid -> { name, bal }
+  const net = {};
   claims.forEach(c => {
     if (!net[c.creditorUid]) net[c.creditorUid] = { name: c.creditorName, bal: 0 };
     if (!net[c.debtorUid])   net[c.debtorUid]   = { name: c.debtorName,   bal: 0 };
@@ -22,7 +21,6 @@ function buildNetBalances(claims) {
   return net;
 }
 
-// Minimum cash flow algorithm — returns array of {from, to, amount}
 function minimizeCashFlow(balances) {
   const creditors = Object.entries(balances)
     .filter(([, v]) => v.bal > 0.005)
@@ -32,7 +30,6 @@ function minimizeCashFlow(balances) {
     .filter(([, v]) => v.bal < -0.005)
     .map(([id, v]) => ({ id, name: v.name, bal: -v.bal }))
     .sort((a, b) => b.bal - a.bal);
-
   const transfers = [];
   let ci = 0, di = 0;
   while (ci < creditors.length && di < debtors.length) {
@@ -48,19 +45,16 @@ function minimizeCashFlow(balances) {
   return transfers;
 }
 
-// Find all groups of interconnected users (connected components in debt graph)
 function findConnectedGroups(claims) {
-  const adj = {}; // uid -> Set of uids
+  const adj = {};
   claims.forEach(c => {
     if (!adj[c.creditorUid]) adj[c.creditorUid] = new Set();
     if (!adj[c.debtorUid])   adj[c.debtorUid]   = new Set();
     adj[c.creditorUid].add(c.debtorUid);
     adj[c.debtorUid].add(c.creditorUid);
   });
-
   const visited = new Set();
   const groups = [];
-
   for (const uid of Object.keys(adj)) {
     if (visited.has(uid)) continue;
     const group = new Set();
@@ -77,7 +71,6 @@ function findConnectedGroups(claims) {
   return groups;
 }
 
-// Preserve the name given at claim time if the user has no display name
 function bestName(appName, phone, claimName) {
   if (appName && !/^\+?[\d\s\-()]+$/.test(appName.trim())) return appName;
   if (claimName && !/^\+?[\d\s\-()]+$/.test(claimName.trim())) return claimName;
@@ -88,7 +81,6 @@ function bestName(appName, phone, claimName) {
 // TRIGGERED FUNCTIONS
 // ================================================================
 
-// Triggered when a new notification document is created
 exports.sendPushNotification = functions.firestore
   .document('notifications/{notifId}')
   .onCreate(async (snap, context) => {
@@ -132,7 +124,6 @@ exports.sendPushNotification = functions.firestore
     }
   });
 
-// Triggered when a new user doc is created — link any pending claims
 exports.linkPendingClaims = functions.firestore
   .document('users/{userId}')
   .onCreate(async (snap, context) => {
@@ -177,18 +168,13 @@ exports.linkPendingClaims = functions.firestore
     }
   });
 
-// Triggered when a simplification document is updated
-// If all consents are in, either execute or decline
 exports.onSimplificationUpdated = functions.firestore
   .document('simplifications/{simplificationId}')
   .onUpdate(async (change, context) => {
     const simp = change.after.data();
     if (simp.status !== 'pending_consent') return null;
-
     const consents = simp.consents || {};
     const participants = simp.participants || [];
-
-    // Check if anyone declined
     if (Object.values(consents).some(c => c === false)) {
       await change.after.ref.update({
         status: 'declined',
@@ -196,37 +182,25 @@ exports.onSimplificationUpdated = functions.firestore
       });
       for (const uid of participants) {
         await db.collection('notifications').add({
-          toUid: uid,
-          title: 'ewe-o-me',
+          toUid: uid, title: 'ewe-o-me',
           body: 'You have new activity — open the app to catch up.',
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          sent: false
+          createdAt: admin.firestore.FieldValue.serverTimestamp(), sent: false
         });
       }
       console.log('Simplification', context.params.simplificationId, 'declined');
       return null;
     }
-
-    // Check if all have agreed
     if (!participants.every(uid => consents[uid] === true)) return null;
-
-    // All agreed — execute the simplification
     console.log('All agreed — executing simplification', context.params.simplificationId);
-
     const batch = db.batch();
-
-    // Settle all affected claims
     for (const claimId of (simp.affectedClaimIds || [])) {
       batch.update(db.collection('claims').doc(claimId), {
-        status: 'settled',
-        settledBy: 'simplification',
+        status: 'settled', settledBy: 'simplification',
         simplificationId: context.params.simplificationId,
         settledAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     }
-
-    // Create new simplified claims (already agreed — skip the pending flow)
     const today = new Date().toISOString().split('T')[0];
     for (const debt of (simp.proposedDebts || [])) {
       const newRef = db.collection('claims').doc();
@@ -235,38 +209,27 @@ exports.onSimplificationUpdated = functions.firestore
         creditorName: (simp.participantNames || {})[debt.to] || 'Unknown',
         debtorUid:    debt.from,
         debtorName:   (simp.participantNames || {})[debt.from] || 'Unknown',
-        amount:       debt.amount,
-        description:  'Simplified debt',
-        status:       'agreed',
-        type:         'eweome',
-        participants: [debt.to, debt.from],
-        date:         today,
+        amount: debt.amount, description: 'Simplified debt',
+        status: 'agreed', type: 'eweome',
+        participants: [debt.to, debt.from], date: today,
         simplificationId: context.params.simplificationId,
-        createdAt:    admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt:    admin.firestore.FieldValue.serverTimestamp()
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     }
-
-    // Mark simplification as completed
     batch.update(change.after.ref, {
       status: 'completed',
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
-
     await batch.commit();
-
-    // Notify everyone
     for (const uid of participants) {
       await db.collection('notifications').add({
-        toUid: uid,
-        title: 'ewe-o-me',
+        toUid: uid, title: 'ewe-o-me',
         body: 'You have new activity — open the app to catch up.',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        sent: false
+        createdAt: admin.firestore.FieldValue.serverTimestamp(), sent: false
       });
     }
-
     console.log('Simplification', context.params.simplificationId, 'completed');
     return null;
   });
@@ -275,78 +238,84 @@ exports.onSimplificationUpdated = functions.firestore
 // SCHEDULED FUNCTIONS
 // ================================================================
 
-// Runs daily — nudges people who have unactioned claims older than 7 days
 exports.sendClaimReminders = functions.pubsub
   .schedule('every 24 hours')
   .timeZone('Europe/London')
   .onRun(async (context) => {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
     const snap = await db.collection('claims')
       .where('status', 'in', ['pending', 'queried'])
       .get();
-
     for (const doc of snap.docs) {
       const claim = doc.data();
-
       const updatedAt = claim.updatedAt?.toDate?.() || new Date(0);
       if (updatedAt > oneWeekAgo) continue;
-
       const lastReminder = claim.lastReminderAt?.toDate?.() || new Date(0);
       if (lastReminder > oneWeekAgo) continue;
-
       let notifyUid = null;
       const isIOU = claim.type === 'ioowe';
-
       if (claim.status === 'pending') {
         notifyUid = isIOU ? claim.creditorUid : claim.debtorUid;
       } else if (claim.status === 'queried') {
-        if (claim.answeredQuestion) {
-          notifyUid = claim.debtorUid;
-        } else if (claim.counterAmount || claim.question) {
-          notifyUid = claim.creditorUid;
-        }
+        if (claim.answeredQuestion) notifyUid = claim.debtorUid;
+        else if (claim.counterAmount || claim.question) notifyUid = claim.creditorUid;
       }
-
       if (!notifyUid) continue;
-
       try {
         await db.collection('notifications').add({
-          toUid: notifyUid,
-          title: 'ewe-o-me',
+          toUid: notifyUid, title: 'ewe-o-me',
           body: 'You have new activity — open the app to catch up.',
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          sent: false
+          createdAt: admin.firestore.FieldValue.serverTimestamp(), sent: false
         });
-
-        await doc.ref.update({
-          lastReminderAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
+        await doc.ref.update({ lastReminderAt: admin.firestore.FieldValue.serverTimestamp() });
         console.log('Reminder sent for claim', doc.id, 'to', notifyUid);
       } catch (e) {
         console.error('Error sending reminder for claim', doc.id, ':', e.message);
       }
     }
-
     return null;
   });
 
-// Runs daily — detects debt loops and proposes simplifications
+// NEW: Runs daily — notifies users about recurring claims that are due today
+exports.sendRecurringReminders = functions.pubsub
+  .schedule('every 24 hours')
+  .timeZone('Europe/London')
+  .onRun(async (context) => {
+    const today = new Date().toISOString().split('T')[0];
+    const snap = await db.collection('claims')
+      .where('recurring', '==', true)
+      .where('nextDue', '<=', today)
+      .where('dueDismissed', '==', false)
+      .get();
+    for (const doc of snap.docs) {
+      const claim = doc.data();
+      if (!claim.creditorUid) continue;
+      try {
+        await db.collection('notifications').add({
+          toUid: claim.creditorUid, title: 'ewe-o-me',
+          body: 'You have new activity — open the app to catch up.',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(), sent: false
+        });
+        console.log('Recurring reminder sent for claim', doc.id);
+      } catch(e) {
+        console.error('Error sending recurring reminder:', e.message);
+      }
+    }
+    return null;
+  });
+
+// NEW: Runs daily — detects debt loops and proposes simplifications (with strangers check)
 exports.detectSimplifications = functions.pubsub
   .schedule('every 24 hours')
   .timeZone('Europe/London')
   .onRun(async (context) => {
     console.log('detectSimplifications running');
-
     const snap = await db.collection('claims')
       .where('status', 'in', ['agreed', 'settlement_pending'])
       .get();
-
     const claims = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(c => !c.pendingPartialAmount || c.pendingPartialAmount < 0.01);
-
     if (claims.length === 0) return null;
 
     const groups = findConnectedGroups(claims);
@@ -356,24 +325,42 @@ exports.detectSimplifications = functions.pubsub
       const groupClaims = claims.filter(c =>
         groupUids.includes(c.creditorUid) && groupUids.includes(c.debtorUid)
       );
-
-      const currentCount = groupClaims.length;
       const netBalances = buildNetBalances(groupClaims);
       const simplified = minimizeCashFlow(netBalances);
       const simplifiedCount = simplified.length;
-
-      // Compare netted counts, not raw claim counts
       const currentNettedCheck = minimizeCashFlow(netBalances).length;
       if (simplifiedCount >= currentNettedCheck) {
         console.log('No improvement for group', groupUids, '- skipping');
         continue;
       }
+
+      // Strangers check: every pair must have direct claim history
+      let allPairsKnown = true;
+      for (let i = 0; i < groupUids.length && allPairsKnown; i++) {
+        for (let j = i + 1; j < groupUids.length && allPairsKnown; j++) {
+          const uidA = groupUids[i];
+          const uidB = groupUids[j];
+          const pairSnap = await db.collection('claims')
+            .where('participants', 'array-contains', uidA)
+            .limit(20)
+            .get();
+          const haveHistory = pairSnap.docs.some(d => {
+            const p = d.data().participants || [];
+            return p.includes(uidA) && p.includes(uidB);
+          });
+          if (!haveHistory) {
+            console.log('No direct history between', uidA, 'and', uidB, '- skipping group');
+            allPairsKnown = false;
+          }
+        }
+      }
+      if (!allPairsKnown) continue;
+
       const participantKey = [...groupUids].sort().join(',');
       const existing = await db.collection('simplifications')
         .where('status', '==', 'pending_consent')
         .where('participantKey', '==', participantKey)
         .get();
-
       if (!existing.empty) {
         console.log('Simplification already pending for group', participantKey);
         continue;
@@ -385,55 +372,32 @@ exports.detectSimplifications = functions.pubsub
         if (entry) participantNames[uid] = entry.name;
       });
 
-// Use minimizeCashFlow for currentDebts too — shows netted transfers, not raw claims
-// This is what the UI displays as "Right now"
       const currentTransfers = minimizeCashFlow(netBalances);
-      const currentDebts = currentTransfers.map(t => ({
-        from: t.from,
-        to: t.to,
-        amount: t.amount
-      }));
-
-      const proposedDebts = simplified.map(t => ({
-        from: t.from,
-        to: t.to,
-        amount: t.amount
-      }));
-
+      const currentDebts = currentTransfers.map(t => ({ from: t.from, to: t.to, amount: t.amount }));
+      const proposedDebts = simplified.map(t => ({ from: t.from, to: t.to, amount: t.amount }));
       const consents = {};
       groupUids.forEach(uid => { consents[uid] = null; });
 
-      // currentCount is now the NETTED transaction count, not raw claim count
-      const currentNettedCount = currentTransfers.length;
-
       const simplificationRef = await db.collection('simplifications').add({
-        participants: groupUids,
-        participantKey,
-        participantNames,
-        currentTransactions: currentNettedCount,
+        participants: groupUids, participantKey, participantNames,
+        currentTransactions: currentTransfers.length,
         simplifiedTransactions: simplifiedCount,
-        currentDebts,
-        proposedDebts,
+        currentDebts, proposedDebts,
         affectedClaimIds: groupClaims.map(c => c.id),
-        status: 'pending_consent',
-        consents,
+        status: 'pending_consent', consents,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-
       console.log('Created simplification', simplificationRef.id, 'for group', participantKey);
 
       for (const uid of groupUids) {
         await db.collection('notifications').add({
-          toUid: uid,
-          title: 'ewe-o-me',
+          toUid: uid, title: 'ewe-o-me',
           body: 'You have new activity — open the app to catch up.',
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          sent: false
+          createdAt: admin.firestore.FieldValue.serverTimestamp(), sent: false
         });
       }
     }
-
     return null;
   });
