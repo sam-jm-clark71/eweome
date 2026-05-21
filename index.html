@@ -812,7 +812,8 @@ const A = {
   _activityChecked: false,
   _walkthroughStep: 0,
   sheepMode: false,
-  _offline: false
+  _offline: false,
+  _seenPendingIds: null
 };
 
 /* ================================================================
@@ -1159,7 +1160,7 @@ function render() {
         </svg>
         My position
       </button>
-      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''} ${A.pendingClaims.length > 0 ? 'pending-alert' : ''}" onclick="go('pending')" style="position:relative;">
+      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''} ${A.pendingClaims.length > 0 ? 'pending-alert' : ''}" onclick="A._seenPendingIds=null;go('pending')" style="position:relative;">
         ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/>
@@ -1301,6 +1302,14 @@ function renderHome() {
             <div style="font-size:11px;margin-top:2px;">Tap <strong>Add</strong></div>
           </div>
         </div>
+      </div>` : ''}
+    ${A.dueClaims && A.dueClaims.length > 0 ? `
+      <div style="margin:0 16px 6px;padding:10px 13px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="go('recurring')">
+        <div style="font-size:16px;">&#128197;</div>
+        <div style="flex:1;font-size:13px;color:var(--green-700);">
+          <strong>${A.dueClaims.length} recurring request${A.dueClaims.length > 1 ? 's' : ''} due</strong> — tap to send
+        </div>
+        <div style="color:var(--green-600);font-size:18px;">&#8250;</div>
       </div>` : ''}
     ${(A.simplifications||[]).length > 0 ? `
       <div style="margin:0 16px 4px;padding:11px 13px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openSimplification('${A.simplifications[0].id}')">
@@ -2033,16 +2042,6 @@ function renderReqDetail() {
       </div>` : ''}`;
 }
 
-function goNextPending() {
-  const next = A.pendingClaims.find(c => c.id !== A.selectedClaimId);
-  if (next) {
-    A.selectedClaimId = next.id;
-    go('req_detail');
-  } else {
-    go('home');
-  }
-}
-
 async function acceptClaim(id) {
   const cl = [...A.pendingClaims,...A.sentClaims,...A.ledger].find(c=>c.id===id);
   // Guard: only the right party can accept
@@ -2136,8 +2135,19 @@ async function confirmReject(id) {
 }
 
 function goNextPending() {
-  const next=A.pendingClaims.find(c=>c.id!==A.selectedClaimId);
-  if(next){A.selectedClaimId=next.id;go('req_detail');}else go('home');
+  // Track which claims have been visited in this pending session
+  if (!A._seenPendingIds) A._seenPendingIds = new Set();
+  A._seenPendingIds.add(A.selectedClaimId);
+  // Find the next claim that hasn't been seen yet
+  const next = A.pendingClaims.find(c => !A._seenPendingIds.has(c.id));
+  if (next) {
+    A.selectedClaimId = next.id;
+    go('req_detail');
+  } else {
+    // All pending items seen — go home and reset
+    A._seenPendingIds = null;
+    go('home');
+  }
 }
 
 function sendRevisedClaim(claimId) {
@@ -5405,10 +5415,19 @@ async function confirmCancelClaim() {
 function abortCancelClaim() { A.confirmCancelId=null; render(); }
 
 function skipClaim(id) {
-  const idx=A.pendingClaims.findIndex(c=>c.id===id);
-  if(idx>=0){const s=A.pendingClaims.splice(idx,1)[0];A.pendingClaims.push(s);}
-  const next=A.pendingClaims.find(c=>c.id!==id);
-  if(next){A.selectedClaimId=next.id;go('req_detail');}else go('pending');
+  if (!A._skippedIds) A._skippedIds = new Set();
+  A._skippedIds.add(id);
+  // Find next claim that hasn't been skipped yet
+  const next = A.pendingClaims.find(c => !A._skippedIds.has(c.id));
+  if (next) {
+    A.selectedClaimId = next.id;
+    go('req_detail');
+  } else {
+    // All pending items skipped — go home
+    A._skippedIds = null;
+    showToast('All caught up for now!');
+    go('home');
+  }
 }
 
 async function confirmBulkSettle(personId) {
