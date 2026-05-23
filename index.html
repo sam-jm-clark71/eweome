@@ -827,7 +827,8 @@ function isSafari()  { return /^((?!chrome|android).)*safari/i.test(navigator.us
 if (localStorage.getItem('eweome_sheep_mode') === '1') A.sheepMode = true;
 
 // Detect Safari browser (not standalone PWA) and add body class for layout adjustments
-if (isIOS() && !window.navigator.standalone) {
+const _isStandalonePWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+if (isIOS() && !_isStandalonePWA) {
   document.body.classList.add('safari-browser');
 }
 
@@ -1272,34 +1273,31 @@ function renderHome() {
         <button onclick="sessionStorage.setItem('notif_prompt_dismissed','1');render()" style="background:none;border:none;font-size:16px;color:var(--text-3);cursor:pointer;padding:0 2px;flex-shrink:0;">&#215;</button>
       </div>` : ''}
     ${showIOSBanner ? `
-      <div style="margin:0 16px 8px;padding:14px;background:linear-gradient(135deg,#EEF5FF,#E8F0FF);border-radius:var(--radius-md);border:0.5px solid #B8D4F0;">
-        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
-          <div style="font-size:22px;flex-shrink:0;">&#128241;</div>
-          <div style="flex:1;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:3px;color:#1a3a6e;">Install ewe-o-me on your iPhone</div>
-            <div style="font-size:12px;color:#2a4a8e;line-height:1.5;">For the best experience — including push notifications — install it as an app. It takes 10 seconds:</div>
-          </div>
+      <div style="margin:0 16px 8px;padding:10px 12px;background:linear-gradient(135deg,#EEF5FF,#E8F0FF);border-radius:var(--radius-md);border:0.5px solid #B8D4F0;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="font-size:18px;flex-shrink:0;">&#128241;</div>
+          <div style="flex:1;font-size:12px;font-weight:600;color:#1a3a6e;">Install ewe-o-me on your iPhone for the best experience</div>
           <button onclick="localStorage.setItem('ios_install_dismissed','1');render()" style="background:none;border:none;font-size:16px;color:#6699cc;cursor:pointer;padding:0;flex-shrink:0;">&#215;</button>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:#1a3a6e;">
-          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
-            <div style="font-size:16px;">&#8226;&#8226;&#8226;</div>
-            <div style="font-size:11px;margin-top:2px;">Tap <strong>•••</strong></div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#8226;&#8226;&#8226;</div>
+            <div style="font-size:10px;margin-top:1px;">Tap <strong>•••</strong></div>
           </div>
-          <div style="font-size:16px;color:#B8D4F0;">›</div>
-          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
-            <div style="font-size:16px;">&#11014;&#65039;</div>
-            <div style="font-size:11px;margin-top:2px;">Tap <strong>Share</strong></div>
+          <div style="font-size:12px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#11014;&#65039;</div>
+            <div style="font-size:10px;margin-top:1px;"><strong>Share</strong></div>
           </div>
-          <div style="font-size:16px;color:#B8D4F0;">›</div>
-          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
-            <div style="font-size:16px;">&#10133;</div>
-            <div style="font-size:11px;margin-top:2px;"><strong>Add to Home</strong> Screen</div>
+          <div style="font-size:12px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#10133;</div>
+            <div style="font-size:10px;margin-top:1px;"><strong>Add to Home</strong></div>
           </div>
-          <div style="font-size:16px;color:#B8D4F0;">›</div>
-          <div style="background:white;border-radius:6px;padding:5px 8px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
-            <div style="font-size:16px;">&#9989;</div>
-            <div style="font-size:11px;margin-top:2px;">Tap <strong>Add</strong></div>
+          <div style="font-size:12px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#9989;</div>
+            <div style="font-size:10px;margin-top:1px;"><strong>Add</strong></div>
           </div>
         </div>
       </div>` : ''}
@@ -2780,7 +2778,8 @@ function renderPosition() {
         : `<div style="padding:32px 24px;text-align:center;">
             <div style="font-size:40px;margin-bottom:14px;">&#9878;</div>
             <div style="font-size:16px;font-weight:500;margin-bottom:8px;">Nothing here yet</div>
-            <div style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:20px;">Once you've sent or received a claim and it's been agreed, your balance with that person will appear here.</div>
+            <div style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:8px;">Once a claim has been agreed by both sides, your balance with that person will appear here.</div>
+            <div style="font-size:12px;color:var(--text-3);line-height:1.6;margin-bottom:20px;">Claims still being negotiated appear in <strong>Pending</strong>, not here.</div>
             <button class="btn btn-green" style="padding:12px 20px;" onclick="startClaim('eweome')">Send your first YOM</button>
           </div>`
       : items.map(i => `
@@ -3392,7 +3391,7 @@ function renderPending() {
         const outSub = c.status === 'queried' && c.answeredQuestion
           ? 'Tap to read their reply'
           : c.status === 'queried' && c.counterAmount
-          ? 'Tap to see their counter-offer'
+          ? 'Tap to view'
           : c.groupId
           ? 'Tap to view (from group settle-up)'
           : 'Tap to view or cancel';
