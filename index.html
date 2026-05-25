@@ -108,17 +108,12 @@
       -webkit-overflow-scrolling: touch;
       padding-bottom: 72px;
     }
-    /* In Safari browser (not installed PWA), add extra padding for the toolbar */
-    body.safari-browser .screen { padding-bottom: 160px; }
-    body.safari-browser .bottom-nav {
-      bottom: 0;
-      height: 140px;
-      align-items: flex-start;
-      padding-top: 8px;
-    }
+    /* In Safari browser (not installed PWA) — move nav above Safari toolbar, shrink circles */
+    body.safari-browser .bottom-nav { bottom: 83px; }
+    body.safari-browser .screen { padding-bottom: 155px; }
     body.safari-browser .circle-btn {
-      width: min(55vw, 28vh, 180px) !important;
-      height: min(55vw, 28vh, 180px) !important;
+      width: min(52vw, 26vh, 170px) !important;
+      height: min(52vw, 26vh, 170px) !important;
     }
 
     /* Dark mode: lighten green/amber/red where used as TEXT colour on dark backgrounds */
