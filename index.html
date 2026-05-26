@@ -62,16 +62,9 @@
         --surface:   #1C1C1E;
         --bg:        #111111;
         --green-50:  #162308;
-        --green-100: #2D4A14;
         --amber-50:  #261A06;
-        --amber-100: #3A2608;
         --red-50:    #26080A;
-        --red-100:   #3A1010;
-        /* green-text is lightened in dark mode — safe because it's ONLY used for text */
         --green-text: #7DC94A;
-        /* amber and red text colours for dark mode */
-        --amber-text: #E09830;
-        --red-text:   #E05858;
       }
     }
 
@@ -132,6 +125,7 @@
       background: var(--bg);
       border-top: 1px solid rgba(0,0,0,0.15);
       display: flex;
+      flex-direction: row;
       z-index: 100;
       padding-bottom: env(safe-area-inset-bottom, 0);
     }
@@ -876,7 +870,7 @@ if (localStorage.getItem('eweome_sheep_mode') === '1') A.sheepMode = true;
 
 // Detect Safari browser (not standalone PWA) and add body class for layout adjustments
 const _isStandalonePWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-if (isIOS() && !_isStandalonePWA) {
+if (isIOS() && !isAPK() && !_isStandalonePWA) {
   document.body.classList.add('safari-browser');
 }
 
