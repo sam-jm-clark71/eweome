@@ -868,9 +868,10 @@ function isSafari()  { return /^((?!chrome|android).)*safari/i.test(navigator.us
 // Load sheep mode preference on startup
 if (localStorage.getItem('eweome_sheep_mode') === '1') A.sheepMode = true;
 
-// Detect Safari browser (not standalone PWA) and add body class for layout adjustments
+// Only add safari-browser class on iOS Safari (not Chrome, not Android, not desktop)
 const _isStandalonePWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-if (isIOS() && !isAPK() && !_isStandalonePWA) {
+const _isIOSSafari = isIOS() && !isAPK() && !_isStandalonePWA && /Safari/.test(navigator.userAgent) && !/CriOS|Chrome|FxiOS|EdgiOS/.test(navigator.userAgent);
+if (_isIOSSafari) {
   document.body.classList.add('safari-browser');
 }
 
