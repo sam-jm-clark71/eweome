@@ -2781,6 +2781,75 @@ function renderQuerySent() {
 /* ================================================================
    SCREEN: MY POSITION
 ================================================================ */
+function timeAgo(ts) {
+  if (!ts) return '';
+  const ms = ts?.toDate?.()?.getTime?.() || (typeof ts === 'number' ? ts : 0);
+  if (!ms) return '';
+  const diff = Date.now() - ms;
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins < 2)   return 'just now';
+  if (mins < 60)  return mins + ' mins ago';
+  if (hours < 24) return hours + (hours === 1 ? ' hour' : ' hours') + ' ago';
+  if (days < 7)   return days + (days === 1 ? ' day' : ' days') + ' ago';
+  return fmtDate(new Date(ms).toISOString().split('T')[0]);
+}
+
+function buildRecentActivity(uid, limit) {
+  const all = [...(A.pendingClaims||[]), ...(A.sentClaims||[]), ...(A.ledger||[]), ...(A.settled||[])];
+  const seen = new Set();
+  const events = [];
+
+  all.forEach(c => {
+    if (seen.has(c.id)) return;
+    seen.add(c.id);
+
+    const iAmCred = c.creditorUid === uid;
+    const iAmDeb  = c.debtorUid  === uid;
+    if (!iAmCred && !iAmDeb) return;
+
+    const other   = iAmCred ? esc(c.debtorName) : esc(c.creditorName);
+    const amount  = fmt(c.amount);
+    const ts      = c.updatedAt || c.createdAt;
+    const msVal   = ts?.toDate?.()?.getTime?.() || 0;
+
+    let icon, text, color;
+
+    if (c.status === 'settled' || c.status === 'completed') {
+      icon = '✓'; color = 'var(--green-600)';
+      if (iAmCred) text = other + ' paid you ' + amount;
+      else         text = 'You paid ' + other + ' ' + amount;
+    } else if (c.status === 'agreed') {
+      icon = '✓'; color = 'var(--green-600)';
+      if (iAmCred) text = other + ' agreed to pay you ' + amount;
+      else         text = 'You agreed to pay ' + other + ' ' + amount;
+    } else if (c.status === 'settlement_pending') {
+      icon = '⏳'; color = 'var(--amber-600)';
+      if (iAmCred) text = other + ' claimed to have paid ' + amount;
+      else         text = 'You claimed to have paid ' + other + ' ' + amount;
+    } else if (c.status === 'queried') {
+      icon = '?'; color = 'var(--amber-600)';
+      if (iAmCred) text = other + ' queried your request for ' + amount;
+      else         text = 'You queried a request from ' + other + ' for ' + amount;
+    } else if (c.status === 'pending') {
+      const createdMs = c.createdAt?.toDate?.()?.getTime?.() || 0;
+      const updatedMs = c.updatedAt?.toDate?.()?.getTime?.() || 0;
+      if (Math.abs(updatedMs - createdMs) < 5000 || !updatedMs) {
+        // Newly created
+        icon = '↗'; color = 'var(--text-2)';
+        if (iAmCred) text = 'You sent a request to ' + other + ' for ' + amount;
+        else         text = other + ' sent you a request for ' + amount;
+      } else return; // updated pending — skip, not informative
+    } else return;
+
+    events.push({ text, icon, color, ms: msVal, claimId: c.id });
+  });
+
+  events.sort((a, b) => b.ms - a.ms);
+  return events.slice(0, limit || 5);
+}
+
 function renderPosition() {
   // Build balance map directly from ledger - works even without connections
   const bals = {};
@@ -2846,6 +2915,25 @@ function renderPosition() {
           </div>`).join('')
     }
     
+    ${(() => {
+      const events = buildRecentActivity(A.user?.uid, 5);
+      if (!events.length) return '';
+      const rows = events.map(e => `
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);" onclick="${e.claimId ? "A.selectedClaimId='" + e.claimId + "';go('req_detail')" : ''}">
+          <div style="width:22px;height:22px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${e.color};flex-shrink:0;margin-top:1px;">${e.icon}</div>
+          <div style="flex:1;">
+            <div style="font-size:13px;color:var(--text-1);line-height:1.5;">${e.text}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${timeAgo(e.ms > 0 ? {toDate: () => new Date(e.ms)} : null)}</div>
+          </div>
+        </div>`).join('');
+      return `
+        <div style="margin:12px 16px 0;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Recent activity</div>
+          ${rows}
+          <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:13px;padding:9px;" onclick="go('all_history')">See full history</button>
+        </div>`;
+    })()}
+
     <div onclick="A.searchQuery='';go('search')" style="margin:12px 16px 80px;padding:14px 16px;background:var(--bg);border:1.5px solid var(--green-600);border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;gap:12px;">
       <div style="flex:1;">
         <div style="font-size:14px;font-weight:500;color:var(--green-600);">Search past entries</div>
