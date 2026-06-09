@@ -2918,7 +2918,7 @@ function renderPosition() {
           </div>`).join('')}
         ${items.length > 4 ? `<button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('all_history')">See full list</button>` : ''}`
     }
-    
+
     ${(() => {
       const events = buildRecentActivity(A.user?.uid, 3);
       if (!events.length) return '';
@@ -2931,6 +2931,7 @@ function renderPosition() {
           </div>
         </div>`).join('');
       return `
+        <hr class="divider">
         <div style="margin:12px 16px 0;">
           <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Recent activity</div>
           ${rows}
