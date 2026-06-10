@@ -2916,7 +2916,7 @@ function renderPosition() {
             </div>
             <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
           </div>`).join('')}
-        <button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('all_history')">See full list</button>`
+        <button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('pos_history')">See full list</button>`
     }
 
     ${(() => {
@@ -2935,7 +2935,7 @@ function renderPosition() {
         <div style="margin:12px 16px 0;">
           <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Recent activity</div>
           ${rows}
-          <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:13px;padding:9px;" onclick="go('all_history')">See full history</button>
+          <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:13px;padding:9px;" onclick="go('pos_history')">See full history</button>
         </div>`;
     })()}
 
