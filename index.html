@@ -2890,7 +2890,7 @@ function renderPosition() {
         </div>
       </div>
     </div>
-    <hr class="divider">
+    <div style="height:8px;"></div>
     ${items.length === 0
       ? A.settled && A.settled.length > 0
         ? `<div class="empty" style="padding:32px 28px;">All square — no outstanding debts. &#10003;</div>`
@@ -2904,7 +2904,7 @@ function renderPosition() {
       : `<div style="padding:4px 16px 2px;">
           <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Outstanding balances</div>
         </div>
-        ${items.map(i => `
+        ${items.slice(0, 3).map(i => `
           <div class="list-item" onclick="viewPersonPos('${esc(i.id)}')">
             <div class="avatar ${i.color || ''}">${initials(i.name)}</div>
             <div style="flex:1;">
@@ -2916,7 +2916,7 @@ function renderPosition() {
             </div>
             <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
           </div>`).join('')}
-        ${items.length > 4 ? `<button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('all_history')">See full list</button>` : ''}`
+        <button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('all_history')">See full list</button>`
     }
 
     ${(() => {
