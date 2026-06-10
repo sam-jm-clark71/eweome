@@ -1072,6 +1072,7 @@ function go(screen) {
 window.onBackPressed = function() {
   const backMap = {
     req_detail: 'home', pos_detail: 'position', pos_history: 'position',
+    all_balances: 'position',
     group_detail: 'groups', group_new: 'groups', group_expense: 'group_detail',
     group_settle_preview: 'group_detail', partial_payment: 'req_detail',
     simplification_detail: 'home', q_form: 'req_detail', all_connections: 'home',
@@ -1138,6 +1139,7 @@ function render() {
     position:   renderPosition,
     pos_detail: renderPosDetail,
     pos_history: renderPosHistory,
+    all_balances: renderAllBalances,
     simplify:    renderSimplify,
     recurring:   renderRecurring,
     reject_form: renderRejectForm,
@@ -2850,6 +2852,27 @@ function buildRecentActivity(uid, limit) {
   return events.slice(0, limit || 5);
 }
 
+function buildPositionItems(uid) {
+  const bals = {};
+  A.ledger.forEach(claim => {
+    if (claim.creditorUid === uid) {
+      const id = claim.debtorUid;
+      if (!bals[id]) bals[id] = { name: claim.debtorName, bal: 0, hasPendingSettlement: false };
+      bals[id].bal += remainingAmount(claim);
+      if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
+    } else if (claim.debtorUid === uid) {
+      const id = claim.creditorUid;
+      if (!bals[id]) bals[id] = { name: claim.creditorName, bal: 0, hasPendingSettlement: false };
+      bals[id].bal -= remainingAmount(claim);
+      if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
+    }
+  });
+  return Object.entries(bals)
+    .filter(([, v]) => Math.abs(v.bal) > 0.005)
+    .map(([id, v]) => ({ id, name: v.name, bal: v.bal, hasPendingSettlement: v.hasPendingSettlement, color: v.bal > 0 ? '' : 'red' }))
+    .sort((a, b) => Math.abs(b.bal) - Math.abs(a.bal));
+}
+
 function renderPosition() {
   // Build balance map directly from ledger - works even without connections
   const bals = {};
@@ -2916,7 +2939,7 @@ function renderPosition() {
             </div>
             <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
           </div>`).join('')}
-        <button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('pos_history')">See full list</button>`
+        <button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('all_balances')">See full list</button>`
     }
 
     ${(() => {
@@ -3398,6 +3421,35 @@ async function respondToSimplification(simplificationId, agreed) {
 /* ================================================================
    SCREEN: FULL HISTORY
 ================================================================ */
+function renderAllBalances() {
+  const uid = A.user?.uid;
+  const items = buildPositionItems(uid); // reuse existing position item builder
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('position')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">All outstanding balances</span>
+    </div>
+    ${items.length === 0
+      ? `<div style="padding:32px 24px;text-align:center;">
+          <div style="font-size:40px;margin-bottom:14px;">&#9878;</div>
+          <div style="font-size:16px;font-weight:500;margin-bottom:8px;">All square!</div>
+          <div style="font-size:13px;color:var(--text-2);">No outstanding balances.</div>
+        </div>`
+      : items.map(i => `
+          <div class="list-item" onclick="viewPersonPos('${esc(i.id)}')">
+            <div class="avatar ${i.color || ''}">${initials(i.name)}</div>
+            <div style="flex:1;">
+              <div style="font-size:15px;font-weight:500;">${esc(i.name)}</div>
+              <div style="font-size:12px;color:var(--text-2);">${i.bal > 0 ? 'owes you' : 'you owe'}${i.hasPendingSettlement ? ' &middot; <span style="color:var(--amber-600);">payment claimed</span>' : ''}</div>
+            </div>
+            <div style="font-size:16px;font-weight:500;color:${i.bal > 0 ? 'var(--green-600)' : 'var(--red-600)'};">
+              ${fmt(Math.abs(i.bal))}
+            </div>
+            <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
+          </div>`).join('')
+    }`;
+}
+
 function renderPosHistory() {
   const uid = A.user?.uid;
   const all = [...A.settled, ...A.ledger].sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -3415,17 +3467,7 @@ function renderPosHistory() {
         <div style="font-size:17px;font-weight:500;margin-bottom:8px;">Nothing here yet</div>
         <div style="font-size:13px;color:var(--text-2);line-height:1.7;">Once you send or receive requests, they'll appear here.</div>
       </div>` : `
-    <div style="display:flex;gap:8px;padding:12px 16px 8px;">
-      <div style="flex:1;background:var(--green-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--green-100);">
-        <div style="font-size:11px;color:var(--green-600);margin-bottom:2px;">Outstanding owed to you</div>
-        <div style="font-size:16px;font-weight:500;color:var(--green-700);">${fmt(totalOwed)}</div>
-      </div>
-      <div style="flex:1;background:var(--red-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid rgba(162,45,45,0.15);">
-        <div style="font-size:11px;color:var(--red-600);margin-bottom:2px;">Outstanding you owe</div>
-        <div style="font-size:16px;font-weight:500;color:var(--red-600);">${fmt(totalOwe)}</div>
-      </div>
-    </div>
-    <div style="padding:6px 16px 10px;font-size:12px;color:var(--text-2);">${totalSettled} settled · ${all.length - totalSettled} outstanding</div>
+    <div style="padding:8px 16px 4px;font-size:12px;color:var(--text-2);">${totalSettled} settled · ${all.length - totalSettled} outstanding</div>
     ${all.map(e => {
       const iCr = e.creditorUid === uid;
       const other = iCr ? e.debtorName : e.creditorName;
