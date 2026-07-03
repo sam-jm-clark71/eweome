@@ -2,13 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>eweome</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>ewe-o-me</title>
+  <link rel="manifest" href="/manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20rx%3D%2222%22%20fill%3D%22%233B6D11%22%2F%3E%3Ctext%20x%3D%2250%22%20y%3D%2272%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%20font-weight%3D%22900%22%20font-size%3D%2268%22%20fill%3D%22white%22%3Ee%3C%2Ftext%3E%3C%2Fsvg%3E">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="theme-color" content="#3B6D11">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="ewe-o-me">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta property="og:title" content="ewe-o-me">
+  <meta property="og:description" content="Log it. Track it. Settle it. — Track money between friends and family.">
+  <meta property="og:image" content="https://eweome-41e0f.web.app/icon-192.png">
 
   <!-- Firebase SDK (v9 compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -24,7 +31,9 @@
       --green-50:   #EAF3DE;
       --green-100:  #C0DD97;
       --green-600:  #3B6D11;
+      --green-700:  #2D5A0A;
       --green-800:  #27500A;
+      --green-text: #3B6D11;  /* use this for GREEN TEXT — can be lightened in dark mode */
       --amber-50:   #FAEEDA;
       --amber-100:  #FAC775;
       --amber-600:  #633806;
@@ -46,15 +55,16 @@
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --text-1:   #F0F0F0;
-        --text-2:   #AAAAAA;
-        --text-3:   #666666;
-        --border:   rgba(255,255,255,0.12);
-        --surface:  #1C1C1E;
-        --bg:       #111111;
-        --green-50: #162308;
-        --amber-50: #261A06;
-        --red-50:   #26080A;
+        --text-1:    #F0F0F0;
+        --text-2:    #AAAAAA;
+        --text-3:    #888888;
+        --border:    rgba(255,255,255,0.12);
+        --surface:   #1C1C1E;
+        --bg:        #111111;
+        --green-50:  #162308;
+        --amber-50:  #261A06;
+        --red-50:    #26080A;
+        --green-text: #7DC94A;
       }
     }
 
@@ -63,7 +73,7 @@
     html, body {
       height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--surface);
+      background: var(--bg);
       color: var(--text-1);
       overflow: hidden;
       -webkit-font-smoothing: antialiased;
@@ -81,6 +91,7 @@
       flex-direction: column;
       position: relative;
       overflow: hidden;
+      padding-top: env(safe-area-inset-top, 0);
     }
 
     .screen {
@@ -89,6 +100,22 @@
       overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
       padding-bottom: 72px;
+    }
+    /* In Safari browser (not installed PWA) — move nav above Safari toolbar, shrink circles */
+    body.safari-browser .bottom-nav { bottom: 83px; }
+    body.safari-browser .screen { padding-bottom: 155px; }
+    body.safari-browser .circle-btn {
+      width: min(52vw, 26vh, 170px) !important;
+      height: min(52vw, 26vh, 170px) !important;
+    }
+
+    /* Dark mode: lighten green/amber/red where used as TEXT colour on dark backgrounds */
+    @media (prefers-color-scheme: dark) {
+      .nav-item.active,
+      .nav-item.active * { color: #7DC94A !important; }
+      .nav-item.active svg { stroke: #7DC94A !important; }
+      a[style*="color:var(--green-600)"],
+      a[style*="color: var(--green-600)"] { color: #7DC94A !important; }
     }
 
     /* ================================================================
@@ -101,6 +128,7 @@
       background: var(--bg);
       border-top: 1px solid rgba(0,0,0,0.15);
       display: flex;
+      flex-direction: row;
       z-index: 100;
       padding-bottom: env(safe-area-inset-bottom, 0);
     }
@@ -114,7 +142,7 @@
       align-items: center;
       justify-content: center;
       gap: 3px;
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-2);
       cursor: pointer;
       transition: color 0.15s;
@@ -328,10 +356,71 @@
       gap: 5px;
       transition: transform 0.12s;
       -webkit-tap-highlight-color: transparent;
+      flex-shrink: 0;
+    }
+    .circle-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-evenly;
+      flex: 1;
+      padding: clamp(12px,4vh,32px) 16px;
+      gap: clamp(12px,4vh,32px);
     }
     .circle-btn:active { transform: scale(0.93); }
     .circle-green { background: var(--green-100); }
     .circle-amber { background: var(--amber-100); }
+    .sheep-circle {
+      position: relative;
+    }
+    .sheep-circle::before {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      background: transparent;
+      /* Scalloped/bumpy outline using radial-gradient mask */
+      border: 3px dashed transparent;
+      background-clip: padding-box;
+      animation: woolly 4s ease-in-out infinite;
+    }
+    .circle-green.sheep-circle::after,
+    .circle-amber.sheep-circle::after {
+      content: '';
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      z-index: -1;
+      animation: woolly 4s ease-in-out infinite;
+    }
+    .circle-green.sheep-circle::after {
+      background: radial-gradient(circle at 50% 0%, #3B6D11 4px, transparent 4px),
+                  radial-gradient(circle at 85% 15%, #3B6D11 4px, transparent 4px),
+                  radial-gradient(circle at 100% 50%, #3B6D11 4px, transparent 4px),
+                  radial-gradient(circle at 85% 85%, #3B6D11 4px, transparent 4px),
+                  radial-gradient(circle at 50% 100%, #3B6D11 4px, transparent 4px),
+                  radial-gradient(circle at 15% 85%, #3B6D11 4px, transparent 4px),
+                  radial-gradient(circle at 0% 50%, #3B6D11 4px, transparent 4px),
+                  radial-gradient(circle at 15% 15%, #3B6D11 4px, transparent 4px);
+      opacity: 0.5;
+    }
+    .circle-amber.sheep-circle::after {
+      background: radial-gradient(circle at 50% 0%, #633806 4px, transparent 4px),
+                  radial-gradient(circle at 85% 15%, #633806 4px, transparent 4px),
+                  radial-gradient(circle at 100% 50%, #633806 4px, transparent 4px),
+                  radial-gradient(circle at 85% 85%, #633806 4px, transparent 4px),
+                  radial-gradient(circle at 50% 100%, #633806 4px, transparent 4px),
+                  radial-gradient(circle at 15% 85%, #633806 4px, transparent 4px),
+                  radial-gradient(circle at 0% 50%, #633806 4px, transparent 4px),
+                  radial-gradient(circle at 15% 15%, #633806 4px, transparent 4px);
+      opacity: 0.35;
+    }
+    @keyframes woolly {
+      0%, 100% { border-radius: 50%; }
+      25% { border-radius: 48% 52% 51% 49% / 52% 48% 52% 48%; }
+      50% { border-radius: 46% 54% 48% 52% / 49% 51% 53% 47%; }
+      75% { border-radius: 52% 48% 54% 46% / 48% 52% 46% 54%; }
+    }
     .circle-label {
       font-size: 15px; font-weight: 500;
       text-align: center; max-width: 100px; line-height: 1.25;
@@ -512,6 +601,33 @@ window.addEventListener('load', () => {
   }, 2000);
 });
 
+// Refresh FCM token periodically — called on every app open after sign-in
+async function refreshFcmToken(uid) {
+  if (!uid) return;
+  // APK: use native bridge
+  if (window.AndroidBridge) {
+    try { window.AndroidBridge.saveFcmToken(uid); } catch(e) {}
+    return;
+  }
+  // Web push: refresh token if permission already granted
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+    }
+    if (!messaging) return;
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    if (token) {
+      // Only write if token has changed — avoid unnecessary Firestore writes
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (userDoc.exists && userDoc.data().fcmToken !== token) {
+        await db.collection('users').doc(uid).update({ fcmToken: token, fcmUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        console.log('FCM token refreshed');
+      }
+    }
+  } catch(e) { console.log('FCM token refresh failed:', e.message); }
+}
+
 window.saveNativeFcmToken = async function(uid, token) {
   if (!uid || !token) return;
   try {
@@ -622,6 +738,66 @@ if (messaging) {
 }
 
 /* ================================================================
+   WHAT'S NEW — version changelog
+   Only add an entry when there's something worth telling users about.
+   Patch fixes and minor tweaks don't need an entry.
+   Versions are shown newest-first. Users see any versions newer than
+   the last version they opened the app on.
+================================================================ */
+const WHATS_NEW = {
+  'v1.9.0': {
+    title: 'iOS improvements & fixes',
+    features: [
+      { icon: '&#128241;', heading: 'Better iOS experience', body: 'Fixed the layout in Safari on iPhone so the bottom navigation bar no longer gets covered by the browser toolbar. The install guide now also shows the correct steps for modern iOS.' },
+      { icon: '&#9889;', heading: 'IOU button label fixed', body: 'The confirm screen for an IOU now correctly says "Send IOU" rather than "Send claim".' }
+    ]
+  },
+  'v1.8.9': {
+    title: 'Walkthrough guide & improvements',
+    features: [
+      { icon: '&#127981;', heading: 'New user guide', body: 'First-time users now get a 6-step walkthrough explaining YOMs, IOUs, Pending, My Position, Groups and notifications. You can replay it any time from Settings.' },
+      { icon: '&#128222;', heading: 'Better app invites', body: 'When you invite a new contact, Android users are now sent directly to the Play Store listing. The WhatsApp message also tries to open the WhatsApp app directly rather than the browser.' }
+    ]
+  },
+  'v1.8.8': {
+    title: 'Group improvements & account merging',
+    features: [
+      { icon: '&#128101;', heading: 'Group expense notifications', body: 'When someone adds an expense to a group you\'re in, you\'ll now get a notification so you\'re always up to date.' },
+      { icon: '&#128073;', heading: 'Leave a group', body: 'Non-creators can now leave a group they no longer want to be part of. The group stays for everyone else.' },
+      { icon: '&#128279;', heading: 'Smarter account setup', body: 'If you sign up with a new email but your phone number is already linked to an existing account, the app will now detect this and offer to merge your accounts so you don\'t lose any history.' }
+    ]
+  },
+  'v1.8.7': {
+    title: 'Debt simplification',
+    features: [
+      { icon: '&#9889;', heading: 'Debt simplification', body: 'When there\'s a debt loop between you and your connections — where everyone owes someone who owes someone else — the app can now suggest a simpler arrangement that needs fewer payments. Everyone has to agree before anything changes, and there\'s no pressure to accept.' }
+    ]
+  },
+  'v1.8.6': {
+    title: 'Partial payments & Pay now',
+    features: [
+      { icon: '&#8617;', heading: 'Partial payments', body: 'You can now pay a debt off in chunks. On any agreed claim, tap "Pay part of this" to log a partial payment. The other person confirms it, and the remaining balance updates automatically.' },
+      { icon: '&#127984;', heading: 'Smarter payment button', body: 'The "Pay by bank transfer" button now tries to open your banking app directly with the amount and details pre-filled. If that doesn\'t work on your device, it falls back to the existing copy-details view.' }
+    ]
+  },
+  'v1.8.5': {
+    title: 'Activity digest & group management',
+    features: [
+      { icon: '&#128276;', heading: 'Activity digest', body: 'When you open the app, you\'ll now see a summary of everything that happened since you were last here — no more missing a second notification because you only spotted the first.' },
+      { icon: '&#128465;', heading: 'Delete or close groups', body: 'Group creators can now delete a group. If it has outstanding balances, you can choose to settle up first — which creates the right pending claims between all members — or just delete it outright.' }
+    ]
+  },
+  'v1.8.1': {
+    title: 'Groups',
+    features: [
+      { icon: '&#128101;', heading: 'Groups', body: 'Split costs across a group of people — great for trips, shared houses, or anything where several people are chipping in. Add a group from the Groups tab, log expenses as you go, and use Settle Up when you\'re done to automatically create the right claims between everyone.' }
+    ]
+  }
+};
+
+const APP_VERSION = 'v1.9.1';
+
+/* ================================================================
    APP STATE
 ================================================================ */
 const A = {
@@ -638,6 +814,8 @@ const A = {
   needsDisplayName: false,
   mergeUid:       null,
   mergeName:      '',
+  mergeEmail:     '',
+  _skipMergeCheck: false,
   _lastSentId:    null,
   confirmCancelId: null,
   _connNotFound:  false,
@@ -670,9 +848,17 @@ const A = {
   notes: [],
   _editNoteId: null,
   groups: [],
+  simplifications: [],
+  selectedSimplificationId: null,
   selectedGroupId: null,
   welcomeSeen: false,
-  _helpOpen: {}
+  _helpOpen: {},
+  activityDigest: [],
+  _activityChecked: false,
+  _walkthroughStep: 0,
+  sheepMode: false,
+  _offline: false,
+  _seenPendingIds: null
 };
 
 /* ================================================================
@@ -682,7 +868,53 @@ function isIOS()     { return /iP(hone|ad|od)/.test(navigator.userAgent); }
 function isAndroid() { return /Android/.test(navigator.userAgent); }
 function isAPK()     { return !!window.AndroidBridge; }
 function isSafari()  { return /^((?!chrome|android).)*safari/i.test(navigator.userAgent); }
+// Load sheep mode preference on startup
+if (localStorage.getItem('eweome_sheep_mode') === '1') A.sheepMode = true;
+
+// Only add safari-browser class on iOS Safari (not Chrome, not Android, not desktop)
+const _isStandalonePWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const _isIOSSafari = isIOS() && !isAPK() && !_isStandalonePWA && /Safari/.test(navigator.userAgent) && !/CriOS|Chrome|FxiOS|EdgiOS/.test(navigator.userAgent);
+if (_isIOSSafari) {
+  document.body.classList.add('safari-browser');
+}
+
+// Monitor online/offline status
+window.addEventListener('online',  () => { A._offline = false; render(); });
+window.addEventListener('offline', () => { A._offline = true;  render(); });
+
+function toggleSheepMode() {
+  A.sheepMode = !A.sheepMode;
+  localStorage.setItem('eweome_sheep_mode', A.sheepMode ? '1' : '0');
+  if (A.sheepMode) {
+    showToast('🐑 Baa! Sheep mode activated.');
+  } else {
+    showToast('Normal mode restored.');
+  }
+  render();
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast('Copied!')).catch(() => copyFallback(text));
+  } else {
+    copyFallback(text);
+  }
+}
+function copyFallback(text) {
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(el);
+    el.focus(); el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('Copied!');
+  } catch(e) { showToast('Could not copy — please copy manually.'); }
+}
+
 function fmt(n)   { return '\u00a3' + parseFloat(n || 0).toFixed(2); }
+function remainingAmount(c) { return Math.max(0, (c.amount || 0) - (c.amountPaid || 0)); }
 function today()  { return new Date().toISOString().split('T')[0]; }
 
 function fmtDate(d) {
@@ -828,10 +1060,40 @@ function go(screen) {
   if (restorable.includes(screen)) {
     try { localStorage.setItem('eweome_last_screen', screen); } catch(e) {}
   }
+  // Push to browser history so Android back gesture/button has something to work with
+  try { history.pushState({ screen }, '', '#' + screen); } catch(e) {}
   render();
   const el = document.querySelector('.screen');
   if (el) el.scrollTop = 0;
 }
+
+// Called by Android WebView when hardware/gesture back is pressed
+// The Kotlin code needs: override fun onBackPressed() { if (!webView.evaluateJavascript("window.onBackPressed()", null)) super.onBackPressed() }
+window.onBackPressed = function() {
+  const backMap = {
+    req_detail: 'home', pos_detail: 'position', pos_history: 'position',
+    all_balances: 'position',
+    group_detail: 'groups', group_new: 'groups', group_expense: 'group_detail',
+    group_settle_preview: 'group_detail', partial_payment: 'req_detail',
+    simplification_detail: 'home', q_form: 'req_detail', all_connections: 'home',
+    all_history: 'home', find_friends: 'home', notes: 'home', help: 'home',
+    settings: 'home', search: 'home',
+  };
+  const noBack = ['signin','loading','welcome','whats_new','activity_digest','merge_accounts','name_prompt','onboarding'];
+  if (noBack.includes(A.screen)) return false; // let system handle (exit or do nothing)
+  const dest = backMap[A.screen];
+  if (dest) { go(dest); return true; }
+  if (['home','position','pending','groups'].includes(A.screen)) return false; // exit app
+  go('home'); return true;
+};
+
+// Handle browser popstate for swipe-back on devices that support it
+window.addEventListener('popstate', (e) => {
+  if (e.state?.screen && e.state.screen !== A.screen) {
+    A.screen = e.state.screen;
+    render();
+  }
+});
 
 const HOME_SCREENS = [
   'home','ew_who','ew_amt','ew_date','ew_desc','ew_conf','ew_sent',
@@ -852,7 +1114,7 @@ function render() {
   const selEnd = document.activeElement?.selectionEnd;
 
   const app = document.getElementById('app');
-  const showNav = !['loading','signin','welcome'].includes(A.screen);
+  const showNav = !['loading','signin','welcome','activity_digest','whats_new','walkthrough'].includes(A.screen);
   const pendingCount = A.pendingClaims.length;
 
   const content = {
@@ -877,6 +1139,7 @@ function render() {
     position:   renderPosition,
     pos_detail: renderPosDetail,
     pos_history: renderPosHistory,
+    all_balances: renderAllBalances,
     simplify:    renderSimplify,
     recurring:   renderRecurring,
     reject_form: renderRejectForm,
@@ -893,6 +1156,11 @@ function render() {
     new_note:        renderNewNote,
     edit_note:       renderEditNote,
     welcome:         renderWelcome,
+    whats_new:       renderWhatsNew,
+    walkthrough:     renderWalkthrough,
+    activity_digest: renderActivityDigest,
+    partial_payment: renderPartialPayment,
+    simplification_detail: renderSimplificationDetail,
     name_prompt:     renderNamePrompt,
     unregistered_claim: renderUnregisteredClaim,
     new_person_claim:    renderNewPersonClaim,
@@ -913,13 +1181,17 @@ function render() {
     }
   };
 
+  const offlineBanner = A._offline
+    ? '<div style="background:#333;color:#fff;font-size:12px;text-align:center;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:10px;">&#128268; No internet connection <button onclick="window.location.reload()" style="background:rgba(255,255,255,0.2);border:none;color:white;font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer;">Retry</button></div>'
+    : '';
+
   if (!showNav) {
-    app.innerHTML = content();
+    app.innerHTML = offlineBanner + content();
     restoreFocus();
     return;
   }
 
-  app.innerHTML = `
+  app.innerHTML = offlineBanner + `
     <div class="screen" style="${['home'].includes(A.screen)?'display:flex;flex-direction:column;':''}">${content()}</div>
     <nav class="bottom-nav" aria-label="Main navigation">
       <button class="nav-item ${HOME_SCREENS.includes(A.screen) ? 'active' : ''}" onclick="go('home')">
@@ -937,7 +1209,7 @@ function render() {
         </svg>
         My position
       </button>
-      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''} ${A.pendingClaims.length > 0 ? 'pending-alert' : ''}" onclick="go('pending')" style="position:relative;">
+      <button class="nav-item ${PENDING_SCREENS.includes(A.screen) ? 'active' : ''} ${A.pendingClaims.length > 0 ? 'pending-alert' : ''}" onclick="A._seenPendingIds=null;go('pending')" style="position:relative;">
         ${A.pendingClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#BA7517;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.pendingClaims.length}</span>` : (A.sentClaims.length > 0 ? `<span style="position:absolute;top:6px;right:10px;min-width:16px;height:16px;background:#888;color:white;border-radius:8px;font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:0 4px;">${A.sentClaims.length}</span>` : "")}
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="10"/>
@@ -995,12 +1267,13 @@ function renderSignIn() {
           <input type="password" id="si-pass" class="input" placeholder="Password" aria-label="Password"/>
           <button class="google-btn" onclick="signInEmail(false)">Sign in</button>
           <button class="google-btn" onclick="signInEmail(true)">Create account</button>
+          <button style="background:none;border:none;font-size:13px;color:var(--green-600);cursor:pointer;text-decoration:underline;" onclick="forgotPassword()">Forgot password?</button>
           <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.signinMode='choose';render()">&#8592; Back</button>
         </div>` : ''}
       ${mode === 'phone' ? `
         <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
           ${A.phoneStep === 'code' ? `
-            <p style="font-size:13px;color:var(--text-2);text-align:center;">Enter the code sent to ${esc(A.phoneNumber)}</p>
+            <p style="font-size:13px;color:var(--text-2);text-align:center;line-height:1.6;">Enter the code sent to ${esc(A.phoneNumber)}<br><span style="font-size:12px;color:var(--text-3);">No code within 30 seconds? Check your spam folder.</span></p>
             <input type="text" id="si-code" class="input" placeholder="6-digit code" inputmode="numeric" maxlength="6" aria-label="Verification code"/>
             <button class="google-btn" onclick="verifyCode()">Verify</button>
             <button style="background:none;border:none;font-size:13px;color:var(--text-2);cursor:pointer;" onclick="A.phoneStep='number';render()">&#8592; Back</button>
@@ -1022,7 +1295,7 @@ function renderHome() {
   checkDueClaims();
   const hp = A.pendingClaims.length > 0;
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  const showIOSBanner = isIOS() && !isStandalone && !sessionStorage.getItem('ios_banner_dismissed');
+  const showIOSBanner = isIOS() && !isStandalone && !localStorage.getItem('ios_install_dismissed');
   const showNotifPrompt = !isAPK() && !isIOS() && 'Notification' in window 
     && Notification.permission === 'default' 
     && !sessionStorage.getItem('notif_prompt_dismissed');
@@ -1041,39 +1314,71 @@ function renderHome() {
       </button>
     </div>
     ${showNotifPrompt ? `
-      <div style="margin:0 16px 4px;padding:11px 13px;background:#F0F4FF;border-radius:var(--radius-sm);border:0.5px solid #C0CCEE;display:flex;align-items:flex-start;gap:10px;">
-        <div style="font-size:18px;">&#128276;</div>
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:500;margin-bottom:2px;">Enable notifications</div>
-          <div style="font-size:12px;color:var(--text-2);line-height:1.5;">Get notified when someone sends you a claim or responds to yours.</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
-          <button onclick="requestNotificationPermission('${A.user?.uid}');sessionStorage.setItem('notif_prompt_dismissed','1');render()" style="background:var(--green-600);color:white;border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:500;padding:5px 10px;cursor:pointer;">Enable</button>
-          <button onclick="sessionStorage.setItem('notif_prompt_dismissed','1');render()" style="background:none;border:none;font-size:11px;color:var(--text-3);cursor:pointer;padding:2px;">Not now</button>
-        </div>
+      <div class="notif-banner" style="margin:0 16px 6px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+        <div style="font-size:16px;flex-shrink:0;">&#128276;</div>
+        <div style="flex:1;font-size:12px;color:var(--text-2);">Enable notifications to stay on top of claims.</div>
+        <button onclick="requestNotificationPermission('${A.user?.uid}');sessionStorage.setItem('notif_prompt_dismissed','1');render()" style="background:var(--green-600);color:white;border:none;border-radius:var(--radius-sm);font-size:12px;font-weight:500;padding:5px 10px;cursor:pointer;flex-shrink:0;">Enable</button>
+        <button onclick="sessionStorage.setItem('notif_prompt_dismissed','1');render()" style="background:none;border:none;font-size:16px;color:var(--text-3);cursor:pointer;padding:0 2px;flex-shrink:0;">&#215;</button>
       </div>` : ''}
     ${showIOSBanner ? `
-      <div style="margin:0 16px 4px;padding:11px 13px;background:#EEF5FF;border-radius:var(--radius-sm);border:0.5px solid #B8D4F0;display:flex;align-items:flex-start;gap:10px;">
-        <div style="font-size:18px;">&#128241;</div>
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:500;margin-bottom:2px;">Tip: add to your home screen</div>
-          <div style="font-size:12px;color:var(--text-2);line-height:1.5;">In Safari, tap &#11014; then <strong>Add to Home Screen</strong> for the best experience.</div>
+      <div style="margin:0 16px 8px;padding:10px 12px;background:linear-gradient(135deg,#EEF5FF,#E8F0FF);border-radius:var(--radius-md);border:0.5px solid #B8D4F0;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="font-size:18px;flex-shrink:0;">&#128241;</div>
+          <div style="flex:1;font-size:12px;font-weight:600;color:#1a3a6e;">Install ewe-o-me on your iPhone for the best experience</div>
+          <button onclick="localStorage.setItem('ios_install_dismissed','1');render()" style="background:none;border:none;font-size:16px;color:#6699cc;cursor:pointer;padding:0;flex-shrink:0;">&#215;</button>
         </div>
-        <button onclick="sessionStorage.setItem('ios_banner_dismissed','1');render()" style="background:none;border:none;font-size:18px;color:var(--text-3);cursor:pointer;padding:0;">&#215;</button>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#8226;&#8226;&#8226;</div>
+            <div style="font-size:10px;margin-top:1px;">Tap <strong>•••</strong></div>
+          </div>
+          <div style="font-size:12px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#11014;&#65039;</div>
+            <div style="font-size:10px;margin-top:1px;"><strong>Share</strong></div>
+          </div>
+          <div style="font-size:12px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#10133;</div>
+            <div style="font-size:10px;margin-top:1px;"><strong>Add to Home</strong></div>
+          </div>
+          <div style="font-size:12px;color:#B8D4F0;">›</div>
+          <div style="background:white;border-radius:6px;padding:4px 6px;border:0.5px solid #B8D4F0;text-align:center;flex:1;">
+            <div style="font-size:13px;">&#9989;</div>
+            <div style="font-size:10px;margin-top:1px;"><strong>Add</strong></div>
+          </div>
+        </div>
       </div>` : ''}
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;flex:1;padding:clamp(12px,4vh,32px) 16px;gap:clamp(12px,4vh,32px);">
-      <button class="circle-btn circle-green" onclick="startClaim('eweome')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
+    ${A.dueClaims && A.dueClaims.length > 0 ? `
+      <div style="margin:0 16px 6px;padding:10px 13px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="go('recurring')">
+        <div style="font-size:16px;">&#128197;</div>
+        <div style="flex:1;font-size:13px;color:var(--green-700);">
+          <strong>${A.dueClaims.length} recurring request${A.dueClaims.length > 1 ? 's' : ''} due</strong> — tap to send
+        </div>
+        <div style="color:var(--green-600);font-size:18px;">&#8250;</div>
+      </div>` : ''}
+    ${(A.simplifications||[]).length > 0 ? `
+      <div style="margin:0 16px 4px;padding:11px 13px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openSimplification('${A.simplifications[0].id}')">
+        <div style="font-size:18px;">&#9889;</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px;color:var(--green-700);">A simpler way to settle up</div>
+          <div style="font-size:12px;color:var(--green-600);line-height:1.5;">There's a suggested simplification involving you — tap to see it.</div>
+        </div>
+        <div style="color:var(--green-600);font-size:18px;">&#8250;</div>
+      </div>` : ''}
+    <div class="circle-container">
+      <button class="circle-btn circle-green ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('eweome')">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
-          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">YOU</span>
+          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">${A.sheepMode ? 'EWE' : 'YOU'}</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">OWE</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#27500A;line-height:1.15;">ME</span>
         </div>
       </button>
-      <button class="circle-btn circle-amber" onclick="startClaim('ioowe')" style="width:min(62vw,min(38vh,210px));height:min(62vw,min(38vh,210px));">
+      <button class="circle-btn circle-amber ${A.sheepMode ? 'sheep-circle' : ''}" onclick="startClaim('ioowe')">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">I</span>
           <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">OWE</span>
-          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">YOU</span>
+          <span style="font-size:22px;font-weight:700;letter-spacing:1px;color:#412402;line-height:1.15;">${A.sheepMode ? 'EWE' : 'YOU'}</span>
         </div>
       </button>
     </div>`;
@@ -1400,7 +1705,7 @@ function renderConfirm() {
         ${msg}<br>
         They'll be notified and can accept, query, or reject.
       </p>
-      <button class="btn btn-green" style="padding:14px;" onclick="sendClaim()">Send claim</button>
+      <button class="btn btn-green" style="padding:14px;" onclick="sendClaim()">${A.claim?.type === 'ioowe' ? 'Send IOU' : 'Send claim'}</button>
     </div>`;
 }
 
@@ -1563,7 +1868,7 @@ function viewClaim(id) {
 }
 
 function renderReqDetail() {
-  const all   = [...A.pendingClaims, ...A.sentClaims, ...A.ledger];
+  const all   = [...A.pendingClaims, ...A.sentClaims, ...A.ledger, ...(A.settled||[])];
   const claim = all.find(c => c.id === A.selectedClaimId);
   if (!claim) return `<div class="empty">Claim not found.</div>`;
 
@@ -1583,7 +1888,13 @@ function renderReqDetail() {
     <div style="padding:16px 16px 0;">
       <div style="text-align:center;padding:16px 0 20px;">
         <div style="font-size:13px;color:var(--text-2);">
-          ${isIOU && iAmCreditor ? esc(claim.debtorName) + ' says they owe you' : esc(claim.creditorName) + ' says ' + (iAmDebtor ? 'you owe' : 'they are owed')}
+          ${claim.groupId
+            ? (iAmDebtor
+                ? 'Group settle-up: you owe ' + esc(claim.creditorName)
+                : 'Group settle-up: ' + esc(claim.debtorName) + ' owes you')
+            : isIOU && iAmCreditor
+              ? esc(claim.debtorName) + ' says they owe you'
+              : esc(claim.creditorName) + ' says ' + (iAmDebtor ? 'you owe' : 'they are owed')}
         </div>
         <div style="font-size:48px;font-weight:500;margin-top:4px;">${fmt(claim.amount)}</div>
         ${claim.status === 'queried'
@@ -1606,6 +1917,9 @@ function renderReqDetail() {
     ${claim.status === 'queried' && !claim.answeredQuestion && iAmDebtor ? `
       <div style="padding:12px 16px;margin:8px 16px 0;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
         <div style="font-size:13px;color:var(--text-2);line-height:1.6;">&#8987; ${claim.question ? 'Your question has been sent.' : 'Your counter-offer of <strong>' + fmt(claim.counterAmount) + '</strong> has been sent.'} Waiting for ${esc(claim.creditorName)} to respond.</div>
+      </div>
+      <div style="padding:8px 16px 4px;">
+        <button class="btn btn-ghost" style="padding:10px;font-size:13px;" onclick="skipClaim('${claim.id}')">Skip for now &rarr;</button>
       </div>` : ''}
 
     ${claim.status === 'queried' && claim.answeredQuestion && iAmDebtor ? `
@@ -1660,7 +1974,8 @@ function renderReqDetail() {
           <div style="font-size:12px;color:var(--text-2);text-align:center;padding:4px 0;">Accept their counter-offer, or counter back:</div>
           <button class="btn btn-green" style="padding:13px;" onclick="acceptCounter('${claim.id}',${claim.counterAmount})">Accept their ${fmt(claim.counterAmount)}</button>
           <button class="btn btn-amber" style="padding:11px;font-size:13px;" onclick="A.queryAmount='';A.queryNote='';A.queryMode='amount';go('q_form')">Propose a different amount</button>
-          <button class="btn btn-grey"  style="padding:11px;font-size:13px;" onclick="confirmCancel('${claim.id}')">Withdraw this claim</button>`}
+          <button class="btn btn-grey"  style="padding:11px;font-size:13px;" onclick="confirmCancel('${claim.id}')">Withdraw this claim</button>
+          <button class="btn btn-ghost" style="padding:10px;font-size:13px;" onclick="skipClaim('${claim.id}')">Skip for now &rarr;</button>`}
       </div>` : ''}
 
     ${claim.status === 'pending' && (iAmCreditor || (claim.type === 'ioowe' && iAmDebtor)) ? `
@@ -1682,19 +1997,46 @@ function renderReqDetail() {
 
     ${(claim.status === 'agreed' || claim.status === 'accepted') ? `
       <div style="padding:12px 16px 0;border-top:0.5px solid var(--border);margin-top:4px;">
+        ${(claim.amountPaid || 0) > 0 ? `
+          <div style="background:var(--green-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--green-100);margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:12px;color:var(--green-700);font-weight:500;">Partially paid</span>
+              <span style="font-size:12px;color:var(--green-700);">${fmt(claim.amountPaid)} of ${fmt(claim.amount)}</span>
+            </div>
+            <div style="height:6px;background:var(--green-100);border-radius:3px;overflow:hidden;">
+              <div style="height:100%;background:var(--green-500);border-radius:3px;width:${Math.min(100,Math.round((claim.amountPaid/claim.amount)*100))}%;"></div>
+            </div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:6px;">${fmt(remainingAmount(claim))} still outstanding</div>
+          </div>` : ''}
+        ${(claim.pendingPartialAmount || 0) > 0 && iAmCreditor ? `
+          <div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--amber-100);margin-bottom:12px;">
+            <p style="font-size:13px;color:var(--amber-700);margin-bottom:10px;line-height:1.5;">
+              ${esc(claim.debtorName)} says they've paid you ${fmt(claim.pendingPartialAmount)}.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <button class="btn btn-green" style="padding:11px;" onclick="confirmPartialPayment('${claim.id}')">Yes, I've received ${fmt(claim.pendingPartialAmount)} &#10003;</button>
+              <button class="btn btn-red"   style="padding:11px;" onclick="disputePartialPayment('${claim.id}')">I haven't received this yet</button>
+            </div>
+          </div>` : ''}
+        ${(claim.pendingPartialAmount || 0) > 0 && iAmDebtor ? `
+          <div style="background:var(--amber-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--amber-100);margin-bottom:12px;">
+            <p style="font-size:12px;color:var(--amber-700);">Waiting for ${esc(claim.creditorName)} to confirm your payment of ${fmt(claim.pendingPartialAmount)}.</p>
+          </div>` : ''}
         <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.6;">
           ${iAmCreditor
             ? "Once you've received the money, mark this as settled."
             : "Once you've paid, tap below. The other person will need to confirm."}
         </p>
-        ${!iAmCreditor ? `
+        ${!iAmCreditor && !(claim.pendingPartialAmount > 0) ? `
           ${A.userDoc?.paymentLink ? `<button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sharePaymentLink('${claim.id}')">&#128178; Send payment via link</button>` : ''}
-          <button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="showBankDetails('${claim.id}')">&#127984; Pay by bank transfer</button>
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="showPayNow('${claim.id}')">&#127984; Pay by bank transfer</button>
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="goToPartialPayment('${claim.id}')">&#8617; Pay part of this...</button>
           ${!A.userDoc?.paymentLink ? `<div style="font-size:12px;color:var(--text-2);text-align:center;padding:2px 0;">&#128161; <a href="#" onclick="go('settings');return false;" style="color:var(--green-600);">Add a payment link</a> for even easier payments.</div>` : ''}
         ` : ''}
+        ${!(claim.pendingPartialAmount > 0) ? `
         <button class="btn btn-ghost" style="padding:13px;" onclick="markSettled('${claim.id}')">
           ${iAmCreditor ? "I've received this money &#10003;" : "I've paid this &#10003;"}
-        </button>
+        </button>` : ''}
       </div>` : ''}
 
     ${claim.status === 'settlement_pending' && iAmCreditor ? `
@@ -1704,6 +2046,7 @@ function renderReqDetail() {
         </p>
         <button class="btn btn-green" style="padding:13px;" onclick="confirmSettlementPrompt('${claim.id}')">Yes, I've received it &#10003;</button>
         <button class="btn btn-red"   style="padding:13px;" onclick="disputeSettlement('${claim.id}')">I haven't received this yet</button>
+        <div style="font-size:11px;color:var(--text-3);text-align:center;padding:2px 0;">Disputing will reopen the debt and notify ${esc(claim.debtorName)}.</div>
       </div>` : ''}
 
     ${claim.status === 'evidence_requested' && iAmCreditor ? `
@@ -1748,16 +2091,6 @@ function renderReqDetail() {
           <button class="btn btn-grey" style="padding:10px;font-size:13px;" onclick="dismissRejected('${claim.id}')">All good — drop it</button>
         </div>
       </div>` : ''}`;
-}
-
-function goNextPending() {
-  const next = A.pendingClaims.find(c => c.id !== A.selectedClaimId);
-  if (next) {
-    A.selectedClaimId = next.id;
-    go('req_detail');
-  } else {
-    go('home');
-  }
 }
 
 async function acceptClaim(id) {
@@ -1853,8 +2186,19 @@ async function confirmReject(id) {
 }
 
 function goNextPending() {
-  const next=A.pendingClaims.find(c=>c.id!==A.selectedClaimId);
-  if(next){A.selectedClaimId=next.id;go('req_detail');}else go('home');
+  // Track which claims have been visited in this pending session
+  if (!A._seenPendingIds) A._seenPendingIds = new Set();
+  A._seenPendingIds.add(A.selectedClaimId);
+  // Find the next claim that hasn't been seen yet
+  const next = A.pendingClaims.find(c => !A._seenPendingIds.has(c.id));
+  if (next) {
+    A.selectedClaimId = next.id;
+    go('req_detail');
+  } else {
+    // All pending items seen — go home and reset
+    A._seenPendingIds = null;
+    go('home');
+  }
 }
 
 function sendRevisedClaim(claimId) {
@@ -1939,7 +2283,7 @@ async function showBankDetails(claimId) {
     </div>`,
     [
       { label: 'Copy details', style: 'btn-green', action: () => {
-        navigator.clipboard?.writeText(details).then(() => showToast('Copied!')).catch(() => showToast('Details shown above — copy manually'));
+        copyToClipboard(details);
       }},
       { label: 'Done', style: 'btn-ghost', action: () => {} }
     ]
@@ -1954,7 +2298,6 @@ function sharePaymentLink(claimId) {
   const creditorName = claim.creditorName || 'them';
   const text = 'Hi ' + creditorName + ' — paying you ' + fmt(claim.amount) +
     (claim.description ? ' for ' + claim.description : '') + ' now.\n\n' + link;
-  // Use direct WhatsApp link if we have their phone number
   const conn = (A.connections||[]).find(c => c.uid === claim.creditorUid || c.id === claim.creditorUid);
   const phone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') : null;
   if (phone) {
@@ -1966,45 +2309,254 @@ function sharePaymentLink(claimId) {
   }
 }
 
-async function markSettled(id) {
-  const claim = A.ledger.find(c => c.id === id);
+async function showPayNow(claimId) {
+  const all = [...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
+  const claim = all.find(c => c.id === claimId);
   if (!claim) return;
+  const creditorUid = claim.creditorUid;
+  let bankDetails = null;
   try {
-    if (claim.creditorUid === A.user.uid) {
+    const snap = await db.collection('bank_details').doc(creditorUid).get();
+    if (snap.exists) bankDetails = snap.data();
+  } catch(e) {}
+
+  const remaining = remainingAmount(claim);
+  const amountStr = remaining.toFixed(2);
+  const ref = (bankDetails?.reference || claim.description || A.userDoc?.displayName || 'payment').substring(0, 18);
+
+  // Attempt payto:// deep link (RFC 8905 — supported by some UK banking apps)
+  if (bankDetails) {
+    const sortRaw = (bankDetails.sortCode || '').replace(/[^0-9]/g, '');
+    const accRaw  = (bankDetails.accountNumber || '').replace(/[^0-9]/g, '');
+    if (sortRaw.length === 6 && accRaw.length === 8) {
+      const paytoUrl = `payto://sort-bic/${sortRaw.slice(0,2)}-${sortRaw.slice(2,4)}-${sortRaw.slice(4,6)}/${accRaw}?amount=GBP:${amountStr}&message=${encodeURIComponent(ref)}`;
+      // Try to open the payto URI; if the browser/OS handles it, great
+      // We detect failure by checking if we're still in the foreground after a short delay
+      let appOpened = false;
+      window.addEventListener('blur', () => { appOpened = true; }, { once: true });
+      window.location.href = paytoUrl;
+      await new Promise(r => setTimeout(r, 800));
+      if (appOpened) return; // Banking app opened — done
+    }
+  }
+
+  // Fallback: show the bank details modal (same as before, just renamed button)
+  if (!bankDetails) {
+    showModal(
+      esc(claim.creditorName) + ' hasn\'t added bank details yet. Ask them to add their details in Settings.',
+      [{ label: 'OK', style: 'btn-ghost', action: () => {} }]
+    );
+    return;
+  }
+  const amount = fmt(remaining);
+  const details = `Account name: ${bankDetails.name}\nSort code: ${bankDetails.sortCode}\nAccount number: ${bankDetails.accountNumber}\nReference: ${ref}\nAmount: ${amount}`;
+  showModal(
+    `<div style="text-align:left;">
+      <div style="font-size:13px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">${esc(claim.creditorName)}'s bank details</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div><div style="font-size:11px;color:var(--text-3);">Account name</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.name)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-3);">Sort code</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.sortCode)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-3);">Account number</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.accountNumber)}</div></div>
+        ${bankDetails.reference ? `<div><div style="font-size:11px;color:var(--text-3);">Reference</div><div style="font-size:15px;font-weight:500;">${esc(bankDetails.reference)}</div></div>` : ''}
+        <div style="margin-top:4px;padding:10px;background:var(--green-50);border-radius:var(--radius-sm);border:0.5px solid var(--green-100);"><div style="font-size:11px;color:var(--text-3);">Amount to pay</div><div style="font-size:18px;font-weight:500;color:var(--green-700);">${amount}</div></div>
+      </div>
+    </div>`,
+    [
+      { label: 'Copy details', style: 'btn-green', action: () => {
+        copyToClipboard(details);
+      }},
+      { label: 'Done', style: 'btn-ghost', action: () => {} }
+    ]
+  );
+}
+
+async function markSettled(id) {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === id);
+  if (!claim) return;
+  const iAmCred = claim.creditorUid === A.user.uid;
+  const otherName = iAmCred ? claim.debtorName : claim.creditorName;
+  try {
+    if (iAmCred) {
+      // Creditor marking received — settle immediately
       await db.collection('claims').doc(id).update({
         status: 'settled',
         settledAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
+      sendPushNotification(claim.debtorUid, A.userDoc?.displayName || 'Someone', 'confirmed receipt of your payment');
+      showToast('Marked as settled ✓');
     } else {
+      // Debtor marking paid — needs creditor confirmation
       await db.collection('claims').doc(id).update({
         status: 'settlement_pending',
         settlementRequestedBy: A.user.uid,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
+      sendPushNotification(claim.creditorUid, A.userDoc?.displayName || 'Someone', 'says they\'ve paid — open the app to confirm');
+      showToast('Payment recorded — waiting for ' + esc(otherName) + ' to confirm ✓');
     }
     go('home');
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
+function confirmSettlementPrompt(id) {
+  const claim = [...A.pendingClaims, ...A.ledger].find(c => c.id === id);
+  if (!claim) return;
+  showModal(
+    '<div style="text-align:center;">'
+    + '<div style="font-size:32px;margin-bottom:12px;">&#9989;</div>'
+    + '<div style="font-size:15px;font-weight:600;margin-bottom:10px;">Confirm receipt of payment</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.7;">'
+    + 'You are confirming that <strong>' + esc(claim.debtorName) + '</strong> has sent '
+    + '<strong>' + fmt(claim.amount) + '</strong> to you in settlement of this debt.'
+    + '<br><br>Once confirmed, this will be marked as fully settled for both of you.'
+    + '</div>'
+    + '</div>',
+    [
+      { label: 'Yes, confirm payment received', style: 'btn-green', action: () => confirmSettlement(id) },
+      { label: 'Not yet — go back', style: 'btn-ghost', action: () => {} }
+    ]
+  );
+}
+
 async function confirmSettlement(id) {
   try {
+    const claim = [...A.pendingClaims, ...A.ledger].find(c => c.id === id);
     await db.collection('claims').doc(id).update({
       status: 'settled',
       settledAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (claim) sendPushNotification(claim.debtorUid, A.userDoc?.displayName || 'Someone', 'confirmed your payment — debt settled!');
+    showToast('Settled ✓');
     goNextPending();
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
 
 async function disputeSettlement(id) {
   try {
+    const claim = [...A.pendingClaims, ...A.ledger].find(c => c.id === id);
     await db.collection('claims').doc(id).update({
       status: 'agreed',
       settlementRequestedBy: null,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (claim) sendPushNotification(claim.debtorUid, A.userDoc?.displayName || 'Someone', 'hasn\'t received your payment — please check and try again');
+    showToast('Disputed — debt reopened and ' + (claim ? esc(claim.debtorName) : 'them') + ' notified.');
+    goNextPending();
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+/* ----------------------------------------------------------------
+   PARTIAL PAYMENTS
+---------------------------------------------------------------- */
+function goToPartialPayment(claimId) {
+  A.selectedClaimId = claimId;
+  A._partialAmount = '';
+  go('partial_payment');
+}
+
+function renderPartialPayment() {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === A.selectedClaimId);
+  if (!claim) return '<div style="padding:40px;text-align:center;">Claim not found.</div>';
+  const remaining = remainingAmount(claim);
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('req_detail')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Partial payment</span>
+    </div>
+    <div style="padding:20px 16px;display:flex;flex-direction:column;gap:16px;">
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:4px;">Claim from ${esc(claim.creditorName)}</div>
+        <div style="font-size:22px;font-weight:600;color:var(--text-1);">${fmt(claim.amount)}</div>
+        ${(claim.amountPaid || 0) > 0 ? `<div style="font-size:13px;color:var(--green-600);margin-top:4px;">${fmt(claim.amountPaid)} already paid · ${fmt(remaining)} remaining</div>` : ''}
+        ${claim.description ? `<div style="font-size:13px;color:var(--text-2);margin-top:4px;">${esc(claim.description)}</div>` : ''}
+      </div>
+      <div>
+        <label class="field-label">How much are you paying now?</label>
+        <div style="position:relative;">
+          <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--text-2);">£</span>
+          <input id="partial-amt" type="number" min="0.01" step="0.01" max="${remaining.toFixed(2)}"
+            style="padding:13px 14px 13px 28px;font-size:17px;width:100%;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);box-sizing:border-box;"
+            placeholder="0.00" value="${A._partialAmount || ''}"
+            oninput="A._partialAmount=this.value"
+            inputmode="decimal" />
+        </div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:6px;">Must be between £0.01 and ${fmt(remaining)}.</div>
+      </div>
+      <button class="btn btn-green" style="padding:14px;" onclick="submitPartialPayment('${claim.id}')">Log this payment</button>
+      <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="go('req_detail')">Cancel</button>
+    </div>`;
+}
+
+async function submitPartialPayment(claimId) {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === claimId);
+  if (!claim) return;
+  const remaining = remainingAmount(claim);
+  const amt = parseFloat(A._partialAmount);
+  if (!amt || isNaN(amt) || amt <= 0) { showToast('Please enter a valid amount.'); return; }
+  if (amt > remaining + 0.001) { showToast('Amount exceeds the remaining balance of ' + fmt(remaining) + '.'); return; }
+  // If paying the full remaining amount, just use the normal markSettled flow
+  if (Math.abs(amt - remaining) < 0.01) {
+    A._partialAmount = '';
+    go('req_detail');
+    await markSettled(claimId);
+    return;
+  }
+  try {
+    await db.collection('claims').doc(claimId).update({
+      pendingPartialAmount: amt,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    sendPushNotification(claim.creditorUid, A.userDoc?.displayName || 'Someone',
+      'says they\'ve paid ' + fmt(amt) + ' towards the ' + fmt(claim.amount) + ' claim');
+    A._partialAmount = '';
+    showToast('Logged! Waiting for ' + (claim.creditorName || 'them') + ' to confirm.');
+    go('home');
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+async function confirmPartialPayment(claimId) {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === claimId);
+  if (!claim) return;
+  const partial = claim.pendingPartialAmount || 0;
+  const newAmountPaid = (claim.amountPaid || 0) + partial;
+  const fullyPaid = newAmountPaid >= claim.amount - 0.01;
+  try {
+    if (fullyPaid) {
+      await db.collection('claims').doc(claimId).update({
+        status: 'settled',
+        amountPaid: newAmountPaid,
+        pendingPartialAmount: 0,
+        settledAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast('Fully settled — nice one!');
+    } else {
+      await db.collection('claims').doc(claimId).update({
+        amountPaid: newAmountPaid,
+        pendingPartialAmount: 0,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast(fmt(partial) + ' confirmed. ' + fmt(claim.amount - newAmountPaid) + ' still outstanding.');
+    }
+    sendPushNotification(claim.debtorUid, A.userDoc?.displayName || 'Someone',
+      fullyPaid ? 'confirmed your final payment — all settled!' : 'confirmed your payment of ' + fmt(partial));
+    goNextPending();
+  } catch(e) { showToast('Something went wrong. Please try again.'); }
+}
+
+async function disputePartialPayment(claimId) {
+  const claim = [...A.ledger, ...A.pendingClaims].find(c => c.id === claimId);
+  if (!claim) return;
+  try {
+    await db.collection('claims').doc(claimId).update({
+      pendingPartialAmount: 0,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    sendPushNotification(claim.debtorUid, A.userDoc?.displayName || 'Someone',
+      'hasn\'t received your payment yet — please check and try again');
+    showToast('Disputed. ' + (claim.debtorName || 'They') + ' has been notified.');
     goNextPending();
   } catch(e) { showToast('Something went wrong. Please try again.'); }
 }
@@ -2266,6 +2818,96 @@ function renderQuerySent() {
 /* ================================================================
    SCREEN: MY POSITION
 ================================================================ */
+function timeAgo(ts) {
+  if (!ts) return '';
+  const ms = ts?.toDate?.()?.getTime?.() || (typeof ts === 'number' ? ts : 0);
+  if (!ms) return '';
+  const diff = Date.now() - ms;
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins < 2)   return 'just now';
+  if (mins < 60)  return mins + ' mins ago';
+  if (hours < 24) return hours + (hours === 1 ? ' hour' : ' hours') + ' ago';
+  if (days < 7)   return days + (days === 1 ? ' day' : ' days') + ' ago';
+  return fmtDate(new Date(ms).toISOString().split('T')[0]);
+}
+
+function buildRecentActivity(uid, limit) {
+  const all = [...(A.pendingClaims||[]), ...(A.sentClaims||[]), ...(A.ledger||[]), ...(A.settled||[])];
+  const seen = new Set();
+  const events = [];
+
+  all.forEach(c => {
+    if (seen.has(c.id)) return;
+    seen.add(c.id);
+
+    const iAmCred = c.creditorUid === uid;
+    const iAmDeb  = c.debtorUid  === uid;
+    if (!iAmCred && !iAmDeb) return;
+
+    const other   = iAmCred ? esc(c.debtorName) : esc(c.creditorName);
+    const amount  = fmt(c.amount);
+    const ts      = c.updatedAt || c.createdAt;
+    const msVal   = ts?.toDate?.()?.getTime?.() || 0;
+
+    let icon, text, color;
+
+    if (c.status === 'settled' || c.status === 'completed') {
+      icon = '✓'; color = 'var(--green-600)';
+      if (iAmCred) text = other + ' paid you ' + amount;
+      else         text = 'You paid ' + other + ' ' + amount;
+    } else if (c.status === 'agreed') {
+      icon = '✓'; color = 'var(--green-600)';
+      if (iAmCred) text = other + ' agreed to pay you ' + amount;
+      else         text = 'You agreed to pay ' + other + ' ' + amount;
+    } else if (c.status === 'settlement_pending') {
+      icon = '⏳'; color = 'var(--amber-600)';
+      if (iAmCred) text = other + ' claimed to have paid ' + amount;
+      else         text = 'You claimed to have paid ' + other + ' ' + amount;
+    } else if (c.status === 'queried') {
+      icon = '?'; color = 'var(--amber-600)';
+      if (iAmCred) text = other + ' queried your request for ' + amount;
+      else         text = 'You queried a request from ' + other + ' for ' + amount;
+    } else if (c.status === 'pending') {
+      const createdMs = c.createdAt?.toDate?.()?.getTime?.() || 0;
+      const updatedMs = c.updatedAt?.toDate?.()?.getTime?.() || 0;
+      if (Math.abs(updatedMs - createdMs) < 5000 || !updatedMs) {
+        // Newly created
+        icon = '↗'; color = 'var(--text-2)';
+        if (iAmCred) text = 'You sent a request to ' + other + ' for ' + amount;
+        else         text = other + ' sent you a request for ' + amount;
+      } else return; // updated pending — skip, not informative
+    } else return;
+
+    events.push({ text, icon, color, ms: msVal, claimId: c.id });
+  });
+
+  events.sort((a, b) => b.ms - a.ms);
+  return events.slice(0, limit || 5);
+}
+
+function buildPositionItems(uid) {
+  const bals = {};
+  A.ledger.forEach(claim => {
+    if (claim.creditorUid === uid) {
+      const id = claim.debtorUid;
+      if (!bals[id]) bals[id] = { name: claim.debtorName, bal: 0, hasPendingSettlement: false };
+      bals[id].bal += remainingAmount(claim);
+      if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
+    } else if (claim.debtorUid === uid) {
+      const id = claim.creditorUid;
+      if (!bals[id]) bals[id] = { name: claim.creditorName, bal: 0, hasPendingSettlement: false };
+      bals[id].bal -= remainingAmount(claim);
+      if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
+    }
+  });
+  return Object.entries(bals)
+    .filter(([, v]) => Math.abs(v.bal) > 0.005)
+    .map(([id, v]) => ({ id, name: v.name, bal: v.bal, hasPendingSettlement: v.hasPendingSettlement, color: v.bal > 0 ? '' : 'red' }))
+    .sort((a, b) => Math.abs(b.bal) - Math.abs(a.bal));
+}
+
 function renderPosition() {
   // Build balance map directly from ledger - works even without connections
   const bals = {};
@@ -2273,12 +2915,12 @@ function renderPosition() {
     if (claim.creditorUid === A.user.uid) {
       const id = claim.debtorUid;
       if (!bals[id]) bals[id] = { name: claim.debtorName, bal: 0, hasPendingSettlement: false };
-      bals[id].bal += claim.amount;
+      bals[id].bal += remainingAmount(claim);
       if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
     } else if (claim.debtorUid === A.user.uid) {
       const id = claim.creditorUid;
       if (!bals[id]) bals[id] = { name: claim.creditorName, bal: 0, hasPendingSettlement: false };
-      bals[id].bal -= claim.amount;
+      bals[id].bal -= remainingAmount(claim);
       if (claim.status === 'settlement_pending') bals[id].hasPendingSettlement = true;
     }
   });
@@ -2306,10 +2948,21 @@ function renderPosition() {
         </div>
       </div>
     </div>
-    <hr class="divider">
+    <div style="height:8px;"></div>
     ${items.length === 0
-      ? `<div class="empty" style="padding:32px 28px;">All square &mdash; no outstanding debts.</div>`
-      : items.map(i => `
+      ? A.settled && A.settled.length > 0
+        ? `<div class="empty" style="padding:32px 28px;">All square — no outstanding debts. &#10003;</div>`
+        : `<div style="padding:32px 24px;text-align:center;">
+            <div style="font-size:40px;margin-bottom:14px;">&#9878;</div>
+            <div style="font-size:16px;font-weight:500;margin-bottom:8px;">Nothing here yet</div>
+            <div style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:8px;">Once a claim has been agreed by both sides, your balance with that person will appear here.</div>
+            <div style="font-size:12px;color:var(--text-3);line-height:1.6;margin-bottom:20px;">Claims still being negotiated appear in <strong>Pending</strong>, not here.</div>
+            <button class="btn btn-green" style="padding:12px 20px;" onclick="startClaim('eweome')">Send your first YOM</button>
+          </div>`
+      : `<div style="padding:4px 16px 2px;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;">Outstanding balances</div>
+        </div>
+        ${items.slice(0, 3).map(i => `
           <div class="list-item" onclick="viewPersonPos('${esc(i.id)}')">
             <div class="avatar ${i.color || ''}">${initials(i.name)}</div>
             <div style="flex:1;">
@@ -2320,9 +2973,30 @@ function renderPosition() {
               ${fmt(Math.abs(i.bal))}
             </div>
             <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
-          </div>`).join('')
+          </div>`).join('')}
+        <button class="btn btn-ghost" style="width:calc(100% - 32px);margin:4px 16px 0;font-size:13px;padding:9px;" onclick="go('all_balances')">See full list</button>`
     }
-    
+
+    ${(() => {
+      const events = buildRecentActivity(A.user?.uid, 3);
+      if (!events.length) return '';
+      const rows = events.map(e => `
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);" onclick="${e.claimId ? "A.selectedClaimId='" + e.claimId + "';go('req_detail')" : ''}">
+          <div style="width:22px;height:22px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${e.color};flex-shrink:0;margin-top:1px;">${e.icon}</div>
+          <div style="flex:1;">
+            <div style="font-size:13px;color:var(--text-1);line-height:1.5;">${e.text}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${timeAgo(e.ms > 0 ? {toDate: () => new Date(e.ms)} : null)}</div>
+          </div>
+        </div>`).join('');
+      return `
+        <hr class="divider">
+        <div style="margin:12px 16px 0;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Recent activity</div>
+          ${rows}
+          <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:13px;padding:9px;" onclick="go('pos_history')">See full history</button>
+        </div>`;
+    })()}
+
     <div onclick="A.searchQuery='';go('search')" style="margin:12px 16px 80px;padding:14px 16px;background:var(--bg);border:1.5px solid var(--green-600);border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;gap:12px;">
       <div style="flex:1;">
         <div style="font-size:14px;font-weight:500;color:var(--green-600);">Search past entries</div>
@@ -2367,7 +3041,7 @@ function renderPosDetail() {
       + (iCr?'+':'-') + fmt(e.amount) + '</span></div>'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
       + '<span style="font-size:12px;color:var(--text-2);">' + fmtDate(e.date) + '</span>'
-      + (isSettled ? '<span class="tag tag-green">Settled</span>' : isPendingSettlement ? '<span class="tag tag-amber">' + (e.creditorUid === A.user?.uid ? 'Payment claimed — confirm in Pending' : 'Payment sent — awaiting confirmation') + '</span>' : '<span class="tag tag-amber">Outstanding</span>')
+      + (isSettled ? '<span class="tag tag-green">Settled</span>' : isPendingSettlement ? '<span class="tag tag-amber">Payment claimed — confirm in Pending</span>' : '<span class="tag tag-amber">Outstanding</span>')
       + '</div>'
       + (isPendingSettlement ? '<div style="margin-top:6px;font-size:12px;color:var(--amber-600);">&#9888; ' + (iCr ? esc(e.debtorName) : esc(e.creditorName)) + ' says they\'ve paid — check your Pending tab to confirm.</div>' : '')
       + (!isSettled && !isPendingSettlement ? '<div style="margin-top:8px;"><button class="btn btn-ghost" style="font-size:12px;padding:8px;" onclick="markSettled(\'' + e.id + '\')">Mark as settled</button></div>' : '')
@@ -2580,13 +3254,242 @@ function renderSimplify() {
 }
 
 /* ================================================================
+   SCREEN: SIMPLIFICATION DETAIL (consent flow)
+================================================================ */
+function openSimplification(id) {
+  A.selectedSimplificationId = id;
+  go('simplification_detail');
+}
+
+function renderSimplificationDetail() {
+  const uid = A.user?.uid;
+  const simp = (A.simplifications || []).find(s => s.id === A.selectedSimplificationId);
+  if (!simp) return '<div style="padding:40px;text-align:center;">Simplification not found.</div>';
+
+  const myConsent = simp.consents?.[uid];
+  const currentCount = simp.currentTransactions || 0;
+  const simplifiedCount = simp.simplifiedTransactions || 0;
+  const saving = currentCount - simplifiedCount;
+
+  // Build name map — use participantNames, fall back to connections, then mask phone numbers
+  const nameMap = {};
+  simp.participants.forEach(p => {
+    if (p === uid) { nameMap[p] = 'You'; return; }
+    const fromSimp = (simp.participantNames || {})[p];
+    const fromConn = (A.connections || []).find(c => (c.uid || c.id) === p)?.name;
+    const raw = fromSimp || fromConn || p;
+    nameMap[p] = /^\+?[\d\s\-()]{7,}$/.test(raw.trim()) ? 'Unknown' : raw;
+  });
+
+  function debtRow(from, to, amount, highlight) {
+    const fromName = nameMap[from] || from;
+    const toName   = nameMap[to]   || to;
+    const isMe = from === uid || to === uid;
+    const bg  = isMe && highlight ? 'var(--green-50)' : 'var(--surface)';
+    const brd = isMe && highlight ? 'var(--green-100)' : 'var(--border)';
+    const col = highlight ? 'var(--green-600)' : 'var(--text-1)';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:' + bg + ';border-radius:var(--radius-sm);border:0.5px solid ' + brd + ';margin-bottom:6px;">'
+      + '<div style="flex:1;min-width:0;font-size:13px;">'
+      + '<strong>' + esc(fromName) + '</strong>'
+      + '<span style="color:var(--text-3);margin:0 5px;">owes</span>'
+      + '<strong>' + esc(toName) + '</strong>'
+      + '</div>'
+      + '<span style="font-size:14px;font-weight:600;color:' + col + ';flex-shrink:0;">' + fmt(amount) + '</span>'
+      + '</div>';
+  }
+
+  const beforeRows = (simp.currentDebts || []).map(d => debtRow(d.from, d.to, d.amount, false)).join('');
+  const afterRows  = (simp.proposedDebts || []).map(d => debtRow(d.from, d.to, d.amount, true)).join('');
+
+  const participantList = simp.participants.map(p => {
+    const c = simp.consents?.[p];
+    const name = nameMap[p] || 'Unknown';
+    const icon = c === true ? '&#10003;' : c === false ? '&#10007;' : '&#8230;';
+    const col  = c === true ? 'var(--green-600)' : c === false ? 'var(--red-600)' : 'var(--text-3)';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;">'
+      + '<span style="color:' + col + ';font-weight:600;width:18px;text-align:center;font-size:14px;">' + icon + '</span>'
+      + '<span style="font-size:13px;">' + esc(name) + '</span>'
+      + '</div>';
+  }).join('');
+
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('home')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">Simplify debts</span>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+
+      <div style="background:var(--green-50);border-radius:var(--radius-md);border:0.5px solid var(--green-100);padding:14px 16px;">
+        <div style="font-size:15px;font-weight:600;color:var(--green-700);margin-bottom:6px;">A simpler way to settle up &#9889;</div>
+        <div style="font-size:13px;color:var(--green-700);line-height:1.6;">
+          There ${currentCount === 1 ? 'is' : 'are'} currently <strong>${currentCount} payment${currentCount !== 1 ? 's' : ''}</strong> needed.
+          This could be reduced to just <strong>${simplifiedCount} payment${simplifiedCount !== 1 ? 's' : ''}</strong> — saving ${saving} step${saving !== 1 ? 's' : ''}.
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Right now</div>
+        ${beforeRows || '<div style="font-size:13px;color:var(--text-3);padding:8px 0;">No outstanding debts.</div>'}
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;color:var(--green-600);">
+        <div style="flex:1;height:1px;background:var(--green-100);"></div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">simplified to</div>
+        <div style="flex:1;height:1px;background:var(--green-100);"></div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">After simplification</div>
+        ${afterRows || '<div style="font-size:13px;color:var(--green-600);padding:8px 0;">&#10003; No payments needed!</div>'}
+      </div>
+
+      <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;">
+        <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Everyone needs to agree</div>
+        ${participantList}
+      </div>
+
+      ${myConsent === null ? `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button class="btn btn-green" style="padding:14px;" onclick="respondToSimplification('${simp.id}', true)">Yes, works for me &#10003;</button>
+          <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="respondToSimplification('${simp.id}', false)">No thanks, leave it as it is</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-3);text-align:center;line-height:1.6;">
+          No pressure — if anyone prefers to leave things as they are, nothing will change.
+        </div>
+      ` : myConsent === true ? `
+        <div style="background:var(--green-50);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--green-100);text-align:center;">
+          <div style="font-size:13px;color:var(--green-700);">You've agreed &#10003; — waiting for the others.</div>
+        </div>
+      ` : `
+        <div style="background:var(--surface);border-radius:var(--radius-sm);padding:12px;border:0.5px solid var(--border);text-align:center;">
+          <div style="font-size:13px;color:var(--text-2);">You've passed on this one. No action needed.</div>
+        </div>
+      `}
+    </div>`;
+}
+
+function buildLoopDiagram(debts, nameMap, myUid, isSimplified) {
+  if (!debts || debts.length === 0) {
+    return '<div style="text-align:center;padding:20px;font-size:13px;color:var(--text-3);">No payments needed.</div>';
+  }
+  // Build a simple horizontal/arc diagram in SVG
+  const people = [...new Set(debts.flatMap(d => [d.from, d.to]))];
+  const n = people.length;
+  const W = 320, H = n <= 3 ? 120 : 160;
+  const cx = W / 2, cy = H / 2;
+  const r = Math.min(cx, cy) - 36;
+
+  // Position nodes in a circle
+  const pos = {};
+  people.forEach((p, i) => {
+    const angle = (2 * Math.PI * i / n) - Math.PI / 2;
+    pos[p] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  });
+
+  const nodeR = 22;
+  const arrowColor = isSimplified ? '#3b6d11' : '#888';
+  const lineColor  = isSimplified ? '#88b85c' : '#ccc';
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px;display:block;margin:0 auto;">`;
+  svg += `<defs><marker id="arr${isSimplified ? 'S' : 'B'}" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="${arrowColor}"/></marker></defs>`;
+
+  // Draw edges
+  debts.forEach(d => {
+    const from = pos[d.from], to = pos[d.to];
+    if (!from || !to) return;
+    // Shorten line to not overlap nodes
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const sx = from.x + dx/dist * nodeR;
+    const sy = from.y + dy/dist * nodeR;
+    const ex = to.x   - dx/dist * (nodeR + 8);
+    const ey = to.y   - dy/dist * (nodeR + 8);
+    // Mid-point label
+    const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+    svg += `<line x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${lineColor}" stroke-width="1.5" marker-end="url(#arr${isSimplified ? 'S' : 'B'})"/>`;
+    svg += `<rect x="${(mx-18).toFixed(1)}" y="${(my-9).toFixed(1)}" width="36" height="16" rx="4" fill="white" opacity="0.9"/>`;
+    svg += `<text x="${mx.toFixed(1)}" y="${(my+4).toFixed(1)}" text-anchor="middle" font-size="9" fill="${arrowColor}" font-family="sans-serif">${esc(fmt(d.amount))}</text>`;
+  });
+
+  // Draw nodes
+  people.forEach(p => {
+    const {x, y} = pos[p];
+    const isMe = p === myUid;
+    const fillCol = isMe ? (isSimplified ? '#3b6d11' : '#5a8a2a') : 'white';
+    const strokeCol = isMe ? (isSimplified ? '#3b6d11' : '#5a8a2a') : '#ccc';
+    const textCol = isMe ? 'white' : '#444';
+    const label = (nameMap[p] || 'Unknown').split(' ')[0]; // first name only
+    svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${nodeR}" fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.5"/>`;
+    svg += `<text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle" font-size="10" fill="${textCol}" font-family="sans-serif" font-weight="${isMe ? '600' : '400'}">${esc(label.substring(0,6))}</text>`;
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+async function respondToSimplification(simplificationId, agreed) {
+  const uid = A.user?.uid;
+  if (!uid) return;
+  const msg = agreed
+    ? 'Are you happy to simplify these debts? The others will need to agree too.'
+    : 'Are you sure? Nothing will change and the others will be told it didn\'t work out.';
+  showModal(msg, [
+    { label: agreed ? 'Yes, works for me' : 'Yes, no thanks', style: agreed ? 'btn-green' : 'btn-ghost', action: async () => {
+      try {
+        await db.collection('simplifications').doc(simplificationId).update({
+          [`consents.${uid}`]: agreed,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        if (!agreed) {
+          showToast('No worries — nothing has changed.');
+          go('home');
+        } else {
+          showToast('Great! Waiting for the others to agree.');
+          render();
+        }
+      } catch(e) { showToast('Something went wrong. Please try again.'); }
+    }},
+    { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+  ]);
+}
+
+/* ================================================================
    SCREEN: FULL HISTORY
 ================================================================ */
+function renderAllBalances() {
+  const uid = A.user?.uid;
+  const items = buildPositionItems(uid); // reuse existing position item builder
+  return `
+    <div class="screen-header">
+      <button class="back-btn" onclick="go('position')" aria-label="Back">&#8249;</button>
+      <span class="screen-title">All outstanding balances</span>
+    </div>
+    ${items.length === 0
+      ? `<div style="padding:32px 24px;text-align:center;">
+          <div style="font-size:40px;margin-bottom:14px;">&#9878;</div>
+          <div style="font-size:16px;font-weight:500;margin-bottom:8px;">All square!</div>
+          <div style="font-size:13px;color:var(--text-2);">No outstanding balances.</div>
+        </div>`
+      : items.map(i => `
+          <div class="list-item" onclick="viewPersonPos('${esc(i.id)}')">
+            <div class="avatar ${i.color || ''}">${initials(i.name)}</div>
+            <div style="flex:1;">
+              <div style="font-size:15px;font-weight:500;">${esc(i.name)}</div>
+              <div style="font-size:12px;color:var(--text-2);">${i.bal > 0 ? 'owes you' : 'you owe'}${i.hasPendingSettlement ? ' &middot; <span style="color:var(--amber-600);">payment claimed</span>' : ''}</div>
+            </div>
+            <div style="font-size:16px;font-weight:500;color:${i.bal > 0 ? 'var(--green-600)' : 'var(--red-600)'};">
+              ${fmt(Math.abs(i.bal))}
+            </div>
+            <div style="color:var(--text-3);font-size:20px;margin-left:6px;">&#8250;</div>
+          </div>`).join('')
+    }`;
+}
+
 function renderPosHistory() {
   const uid = A.user?.uid;
   const all = [...A.settled, ...A.ledger].sort((a,b) => (b.date||'').localeCompare(a.date||''));
-  const totalOwed = A.ledger.filter(c=>c.creditorUid===uid).reduce((s,c)=>s+c.amount,0);
-  const totalOwe  = A.ledger.filter(c=>c.debtorUid===uid).reduce((s,c)=>s+c.amount,0);
+  const totalOwed = A.ledger.filter(c=>c.creditorUid===uid).reduce((s,c)=>s+remainingAmount(c),0);
+  const totalOwe  = A.ledger.filter(c=>c.debtorUid===uid).reduce((s,c)=>s+remainingAmount(c),0);
   const totalSettled = A.settled.length;
   return `
     <div class="screen-header">
@@ -2599,17 +3502,7 @@ function renderPosHistory() {
         <div style="font-size:17px;font-weight:500;margin-bottom:8px;">Nothing here yet</div>
         <div style="font-size:13px;color:var(--text-2);line-height:1.7;">Once you send or receive requests, they'll appear here.</div>
       </div>` : `
-    <div style="display:flex;gap:8px;padding:12px 16px 8px;">
-      <div style="flex:1;background:var(--green-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid var(--green-100);">
-        <div style="font-size:11px;color:var(--green-600);margin-bottom:2px;">Outstanding owed to you</div>
-        <div style="font-size:16px;font-weight:500;color:var(--green-700);">${fmt(totalOwed)}</div>
-      </div>
-      <div style="flex:1;background:var(--red-50);border-radius:var(--radius-sm);padding:10px 12px;border:0.5px solid rgba(162,45,45,0.15);">
-        <div style="font-size:11px;color:var(--red-600);margin-bottom:2px;">Outstanding you owe</div>
-        <div style="font-size:16px;font-weight:500;color:var(--red-600);">${fmt(totalOwe)}</div>
-      </div>
-    </div>
-    <div style="padding:6px 16px 10px;font-size:12px;color:var(--text-2);">${totalSettled} settled · ${all.length - totalSettled} outstanding</div>
+    <div style="padding:8px 16px 4px;font-size:12px;color:var(--text-2);">${totalSettled} settled · ${all.length - totalSettled} outstanding</div>
     ${all.map(e => {
       const iCr = e.creditorUid === uid;
       const other = iCr ? e.debtorName : e.creditorName;
@@ -2639,12 +3532,6 @@ function renderPending() {
       <div style="font-size:17px;font-weight:500;margin-bottom:4px;">Pending</div>
     </div>
     <hr class="divider">
-    ${incoming.length === 0 && outgoing.length === 0 ? `
-      <div style="padding:40px 24px;text-align:center;">
-        <div style="font-size:40px;margin-bottom:14px;">&#10003;</div>
-        <div style="font-size:17px;font-weight:500;margin-bottom:8px;">All caught up!</div>
-        <div style="font-size:13px;color:var(--text-2);line-height:1.7;">Nothing needs your attention right now.</div>
-      </div>` : ''}
     ${incoming.length > 0 ? `
       <div style="padding:10px 16px 6px;">
         <div style="font-size:12px;font-weight:500;color:var(--text-2);text-transform:uppercase;letter-spacing:0.05em;">Action needed</div>
@@ -2661,6 +3548,9 @@ function renderPending() {
         } else if (isSettle) {
           label = esc(c.debtorName) + ' says they\'ve paid you';
           sublabel = 'Tap to confirm you received it';
+        } else if (c.status === 'agreed' && (c.pendingPartialAmount || 0) > 0 && iAmCr) {
+          label = esc(c.debtorName) + ' says they\'ve paid ' + fmt(c.pendingPartialAmount);
+          sublabel = 'Tap to confirm you received this partial payment';
         } else if (c.status === 'queried' && c.question && !c.counterAmount && iAmCr) {
           label = esc(c.debtorName) + ' has asked you a question';
           sublabel = 'Tap to read it and respond';
@@ -2676,10 +3566,15 @@ function renderPending() {
           label = 'Waiting for ' + esc(c.creditorName) + ' to answer your question';
           sublabel = 'Tap to view';
         } else {
-          label = c.type === 'ioowe'
-            ? esc(c.debtorName) + ' has sent you an I Owe You'
-            : esc(c.creditorName) + ' has sent you a request';
-          sublabel = 'Tap to accept, query or reject';
+          if (c.groupId) {
+            label = 'Group settle-up: ' + esc(c.creditorName) + ' is owed ' + fmt(c.amount);
+            sublabel = 'Tap to accept, query or reject';
+          } else {
+            label = c.type === 'ioowe'
+              ? esc(c.debtorName) + ' has sent you an I Owe You'
+              : esc(c.creditorName) + ' has sent you a request';
+            sublabel = 'Tap to accept, query or reject';
+          }
         }
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
           + '<div class="avatar ' + (isReject ? '' : 'amber') + '">' + initials(other) + '</div>'
@@ -2710,13 +3605,15 @@ function renderPending() {
               : 'Waiting for ' + esc(waitingOn) + ' to answer your question')
           : c.status === 'queried' && c.counterAmount
           ? 'Waiting for ' + esc(c.creditorName) + ' to respond to your counter-offer'
-          : c.status === 'settlement_pending'
-          ? 'Waiting for ' + esc(c.creditorName) + ' to confirm your payment'
+          : c.groupId
+          ? 'Group settle-up: waiting for ' + esc(otherName) + ' to respond'
           : 'Waiting for ' + esc(otherName) + ' to respond';
         const outSub = c.status === 'queried' && c.answeredQuestion
           ? 'Tap to read their reply'
           : c.status === 'queried' && c.counterAmount
-          ? 'Tap to see their counter-offer'
+          ? 'Tap to view'
+          : c.groupId
+          ? 'Tap to view (from group settle-up)'
           : 'Tap to view or cancel';
         return '<div class="list-item" onclick="viewClaim(\'' + c.id + '\')">'
           + '<div class="avatar">' + initials(c.debtorName) + '</div>'
@@ -2791,12 +3688,212 @@ function renderWelcome() {
 function dismissWelcome(goToHelp) {
   A.welcomeSeen = true;
   localStorage.setItem('eweome_welcome_seen', '1');
-  go(goToHelp ? 'help' : 'home');
+  localStorage.setItem('eweome_last_seen_version', APP_VERSION);
+  if (goToHelp) { go('help'); return; }
+  // Offer walkthrough to new users
+  go('walkthrough');
 }
 
 /* ================================================================
-   HELP SCREEN
+   WALKTHROUGH
 ================================================================ */
+const WALKTHROUGH_STEPS = [
+  {
+    icon: '&#128178;',
+    title: 'You Owe Me (YOM)',
+    body: 'Tap the big green button to send a YOM — "You Owe Me." Use this when someone owes YOU money. Enter who, how much, and what for. They\'ll get a notification and can accept, query, or reject it.',
+    tip: 'The green button = money coming TO you.'
+  },
+  {
+    icon: '&#128176;',
+    title: 'I Owe You (IOU)',
+    body: 'Tap the amber button to log an IOU — "I Owe You." Use this when YOU owe someone else money. Same flow — just the other direction. The other person will see it in their Pending tab.',
+    tip: 'The amber button = money going FROM you.'
+  },
+  {
+    icon: '&#9989;',
+    title: 'Pending',
+    body: 'The Pending tab shows everything that needs action. "Action needed" = claims sent to you that you haven\'t responded to yet. "Waiting on them" = claims you\'ve sent that they haven\'t responded to yet.',
+    tip: 'A yellow dot on Pending means something needs your attention.'
+  },
+  {
+    icon: '&#128200;',
+    title: 'My Position',
+    body: 'The My Position tab shows your overall balance with each person — how much you\'re owed and how much you owe, all in one place. Tap any person to see the full history of claims between you.',
+    tip: 'Green = they owe you. Red = you owe them.'
+  },
+  {
+    icon: '&#128101;',
+    title: 'Groups',
+    body: 'Going on a trip or splitting regular costs? Create a group, add expenses as you go (split equally or custom amounts), and use Settle Up when you\'re done. The app works out the minimum number of payments needed.',
+    tip: 'Groups are great for holidays, shared houses, or any shared expense.'
+  },
+  {
+    icon: '&#128276;',
+    title: 'Notifications',
+    body: 'You\'ll get a push notification whenever something happens — a new claim, an acceptance, a question, a payment. Tap the notification to open the app and you\'ll see a summary of everything that happened since you were last here.',
+    tip: 'Make sure notifications are enabled so you never miss anything.'
+  }
+];
+
+function renderWalkthrough() {
+  const step = Math.min(A._walkthroughStep || 0, WALKTHROUGH_STEPS.length - 1);
+  const s = WALKTHROUGH_STEPS[step];
+  const total = WALKTHROUGH_STEPS.length;
+  const isLast = step === total - 1;
+
+  const dots = WALKTHROUGH_STEPS.map((_, i) =>
+    '<div style="width:' + (i === step ? '20' : '8') + 'px;height:8px;border-radius:4px;background:' +
+    (i === step ? 'var(--green-600)' : 'var(--border)') + ';transition:width 0.2s;"></div>'
+  ).join('');
+
+  return `
+    <div class="signin-screen" style="padding:40px 24px 32px;gap:0;justify-content:space-between;min-height:100%;">
+      <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px;max-width:320px;">
+        <div style="font-size:56px;line-height:1;">${s.icon}</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text-1);">${esc(s.title)}</div>
+        <div style="font-size:14px;color:var(--text-2);line-height:1.7;">${esc(s.body)}</div>
+        <div style="background:var(--green-50);border-radius:var(--radius-sm);padding:10px 14px;border:0.5px solid var(--green-100);">
+          <div style="font-size:12px;color:var(--green-700);line-height:1.5;">&#128161; ${esc(s.tip)}</div>
+        </div>
+      </div>
+      <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;justify-content:center;gap:6px;align-items:center;padding:8px 0;">${dots}</div>
+        <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="walkthroughNext()">
+          ${isLast ? 'Get started &#10003;' : 'Next &#8250;'}
+        </button>
+        <button style="background:none;border:none;font-size:13px;color:var(--text-3);cursor:pointer;padding:6px;" onclick="dismissWalkthrough()">Skip guide</button>
+      </div>
+    </div>`;
+}
+
+function walkthroughNext() {
+  const next = (A._walkthroughStep || 0) + 1;
+  if (next >= WALKTHROUGH_STEPS.length) {
+    dismissWalkthrough();
+  } else {
+    A._walkthroughStep = next;
+    render();
+  }
+}
+
+function dismissWalkthrough() {
+  A._walkthroughStep = 0;
+  localStorage.setItem('eweome_walkthrough_seen', '1');
+  go('home');
+}
+function hasNewFeaturesToShow() {
+  const lastSeen = localStorage.getItem('eweome_last_seen_version');
+  if (!lastSeen) return false; // brand new user — they get the welcome screen instead
+  if (lastSeen === APP_VERSION) return false;
+  // Check if any version in WHATS_NEW is newer than lastSeen
+  return versionsNewerThan(lastSeen).length > 0;
+}
+
+function versionsNewerThan(lastSeen) {
+  // Version strings are like 'v1.8.1' — parse and compare numerically
+  function vNum(v) {
+    return (v || '').replace('v','').split('.').map(Number);
+  }
+  function isNewer(a, b) {
+    const an = vNum(a), bn = vNum(b);
+    for (let i = 0; i < 3; i++) {
+      if ((an[i]||0) > (bn[i]||0)) return true;
+      if ((an[i]||0) < (bn[i]||0)) return false;
+    }
+    return false;
+  }
+  return Object.keys(WHATS_NEW)
+    .filter(v => isNewer(v, lastSeen))
+    .sort((a, b) => isNewer(b, a) ? 1 : -1); // newest first
+}
+
+function renderWhatsNew() {
+  const lastSeen = localStorage.getItem('eweome_last_seen_version') || '';
+  const newVersions = versionsNewerThan(lastSeen);
+  const allFeatures = newVersions.flatMap(v => (WHATS_NEW[v]?.features || []));
+  const headline = newVersions.length === 1
+    ? 'New in ' + newVersions[0]
+    : "Here's what's new";
+
+  const featureRows = allFeatures.map(f =>
+    '<div style="display:flex;gap:14px;align-items:flex-start;padding:13px 0;border-bottom:0.5px solid var(--border);">'
+    + '<div style="font-size:22px;flex-shrink:0;width:32px;text-align:center;">' + f.icon + '</div>'
+    + '<div style="flex:1;min-width:0;">'
+    + '<div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:3px;">' + esc(f.heading) + '</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.55;">' + esc(f.body) + '</div>'
+    + '</div>'
+    + '</div>'
+  ).join('');
+
+  return `
+    <div class="signin-screen" style="padding:40px 24px 32px;gap:0;justify-content:flex-start;min-height:100%;">
+      <div style="text-align:center;margin-bottom:24px;">
+        ${sheepSvg(56)}
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:var(--green-600);margin-top:12px;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text-1);margin-top:14px;">${esc(headline)}</div>
+      </div>
+      <div style="width:100%;max-width:360px;background:var(--surface);border-radius:var(--radius-md);border:0.5px solid var(--border);padding:0 16px;margin-bottom:24px;">
+        ${featureRows}
+      </div>
+      <div style="width:100%;max-width:360px;">
+        <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="dismissWhatsNew()">Got it</button>
+      </div>
+    </div>`;
+}
+
+function dismissWhatsNew() {
+  localStorage.setItem('eweome_last_seen_version', APP_VERSION);
+  const restorable = ['home','position','pending','all_connections','notes','help','groups'];
+  const last = localStorage.getItem('eweome_last_screen');
+  go(last && restorable.includes(last) ? last : 'home');
+}
+function renderActivityDigest() {
+  const items = A.activityDigest || [];
+  const rows = items.map(item => {
+    let icon = '&#128276;'; // bell
+    let iconBg = 'var(--green-50)'; let iconColor = 'var(--green-600)';
+    if (item.status === 'rejected' || item.status === 'cancelled') {
+      icon = '&#10060;'; iconBg = 'var(--red-50)'; iconColor = 'var(--red-600)';
+    } else if (item.status === 'queried') {
+      icon = '&#63;'; iconBg = 'var(--amber-50)'; iconColor = 'var(--amber-700)';
+    } else if (item.status === 'settled') {
+      icon = '&#10003;'; iconBg = 'var(--green-50)'; iconColor = 'var(--green-600)';
+    } else if (item.status === 'settlement_pending') {
+      icon = '&#128176;'; iconBg = 'var(--amber-50)'; iconColor = 'var(--amber-700)';
+    } else if (item.status === 'agreed') {
+      icon = '&#10003;'; iconBg = 'var(--green-50)'; iconColor = 'var(--green-600)';
+    }
+    return '<div style="display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:0.5px solid var(--border);">'
+      + '<div style="width:34px;height:34px;border-radius:50%;background:' + iconBg + ';color:' + iconColor + ';display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">' + icon + '</div>'
+      + '<div style="flex:1;min-width:0;"><div style="font-size:13px;line-height:1.5;color:var(--text-1);">' + esc(item.text) + '</div></div>'
+      + '</div>';
+  }).join('');
+
+  const count = items.length;
+  const headline = count === 1 ? 'Something happened while you were away' : count + ' things happened while you were away';
+
+  return `
+    <div class="signin-screen" style="padding:40px 24px 32px;gap:0;justify-content:flex-start;min-height:100%;">
+      <div style="text-align:center;margin-bottom:24px;">
+        ${sheepSvg(56)}
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:var(--green-600);margin-top:12px;display:inline-block;transform:scaleY(1.1);transform-origin:center bottom;white-space:nowrap;">ewe-o-me</div>
+        <div style="font-size:15px;font-weight:500;color:var(--text-1);margin-top:14px;">${esc(headline)}</div>
+      </div>
+      <div style="width:100%;max-width:360px;background:var(--surface);border-radius:var(--radius-md);border:0.5px solid var(--border);padding:0 16px;margin-bottom:24px;">
+        ${rows}
+      </div>
+      <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="dismissActivityDigest('pending')">Go to Pending</button>
+        <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="dismissActivityDigest('home')">Go to Home</button>
+      </div>
+    </div>`;
+}
+
+function dismissActivityDigest(dest) {
+  A.activityDigest = [];
+  go(dest || 'home');
+}
 function renderHelp() {
   const sections = [
     {
@@ -3443,6 +4540,20 @@ async function saveOnboardingPhone() {
   if (!rawOb) { go('home'); return; }
   const normalised = normalisePhone(rawOb);
   try {
+    // Check if phone already belongs to a different account
+    const existing = await db.collection('users_by_phone').doc(normalised).get();
+    if (existing.exists && existing.data().uid !== A.user.uid) {
+      // Phone is already on another account — show merge screen
+      const existingUid = existing.data().uid;
+      const existingDoc = await db.collection('users').doc(existingUid).get();
+      const existingEmail = existingDoc.exists ? (existingDoc.data().email || '') : '';
+      A.mergeUid   = existingUid;
+      A.mergeName  = existing.data().displayName || '';
+      A.mergeEmail = existingEmail;
+      A._pendingPhone = normalised;
+      go('merge_accounts');
+      return;
+    }
     const displayName = A.userDoc?.displayName || A.user?.displayName || '';
     await db.collection('users').doc(A.user.uid).update({ phone: normalised });
     await db.collection('users_by_phone').doc(normalised).set({ uid: A.user.uid, displayName });
@@ -3497,7 +4608,7 @@ function renderAllConnections() {
         oninput="A._connSearch=this.value;render()"
         autocomplete="off" style="margin:0;"/>
     </div>
-    <div id="conn-results">${rows || '<div style="padding:24px;text-align:center;font-size:13px;color:var(--text-2);">No connections yet.</div>'}</div>
+    <div id="conn-results">${rows || '<div style="padding:32px 24px;text-align:center;"><div style="font-size:36px;margin-bottom:12px;">&#128101;</div><div style="font-size:15px;font-weight:500;margin-bottom:8px;">No connections yet</div><div style="font-size:13px;color:var(--text-2);line-height:1.7;">People you send claims to or receive claims from will appear here automatically.</div></div>'}</div>
     <div style="padding:12px 16px;">
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A.claim.type=null;go('new_conn')">+ Add connection</button>
     </div>`;
@@ -3726,7 +4837,12 @@ function renderGroupDetail() {
     <div class="screen-header">
       <button class="back-btn" onclick="go('groups')" aria-label="Back">&#8249;</button>
       <span class="screen-title">${esc(group.name)}</span>
-      <button onclick="go('group_expense')" style="background:none;border:none;font-size:22px;color:var(--green-600);cursor:pointer;padding:4px 8px;">+</button>
+      <div style="margin-left:auto;display:flex;gap:4px;align-items:center;">
+        ${group.createdBy === uid ? `<button onclick="deleteOrCloseGroup('${group.id}')" style="background:none;border:none;cursor:pointer;padding:4px 8px;color:var(--text-3);" aria-label="Delete group" title="Delete group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+        </button>` : `<button onclick="leaveGroup('${group.id}')" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:12px;color:var(--text-3);" title="Leave group">Leave</button>`}
+        <button onclick="go('group_expense')" style="background:none;border:none;font-size:22px;color:var(--green-600);cursor:pointer;padding:4px 8px;">+</button>
+      </div>
     </div>
     <div style="padding:12px 16px;background:var(--green-50);border-bottom:0.5px solid var(--green-100);">
       <div style="font-size:13px;color:var(--green-700);">${positionText}</div>
@@ -3758,14 +4874,68 @@ function computeGroupBalances(group) {
   return net;
 }
 
+// Computes group balances adjusted for exit claims already created for formerMembers.
+// Zeroes out formerMember balances (they don't participate in active settle-up)
+// and reduces active members' balances by any external payments they've already committed to.
+async function getGroupAdjustedBalances(group) {
+  const rawBalances = computeGroupBalances(group);
+  const formerMemberSet = new Set(group.formerMembers || []);
+  if (formerMemberSet.size === 0) return rawBalances;
+
+  // Query claims created from this group (exit claims and settle-up claims)
+  let exitClaims = [];
+  try {
+    const snap = await db.collection('claims')
+      .where('groupId', '==', group.id)
+      .get();
+    exitClaims = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+      .filter(c => c.status !== 'cancelled' && c.status !== 'rejected' && c.status !== 'settled');
+  } catch(e) {
+    console.warn('getGroupAdjustedBalances: could not query claims', e);
+    return rawBalances;
+  }
+
+  // Step 1: zero out formerMembers
+  const adj = { ...rawBalances };
+  formerMemberSet.forEach(uid => { if (adj[uid] !== undefined) adj[uid] = 0; });
+
+  // Step 2: for claims between a formerMember and an active member,
+  // adjust the active member's balance by the remaining amount
+  // (they'll pay/receive externally via the real claim)
+  const adjustments = {};
+  exitClaims.forEach(c => {
+    const credIsFormer = formerMemberSet.has(c.creditorUid);
+    const debIsFormer  = formerMemberSet.has(c.debtorUid);
+    const remaining = Math.max(0, (c.amount || 0) - (c.amountPaid || 0));
+    if (remaining < 0.01) return;
+    if (credIsFormer && !debIsFormer) {
+      // Active debtor will pay formerMember externally — reduce their active balance magnitude
+      adjustments[c.debtorUid] = (adjustments[c.debtorUid] || 0) + remaining;
+    } else if (debIsFormer && !credIsFormer) {
+      // Active creditor will receive from formerMember externally — reduce their active balance
+      adjustments[c.creditorUid] = (adjustments[c.creditorUid] || 0) + remaining;
+    }
+  });
+
+  Object.entries(adjustments).forEach(([uid, a]) => {
+    if (adj[uid] > 0)      adj[uid] = Math.max(0, adj[uid] - a);
+    else if (adj[uid] < 0) adj[uid] = Math.min(0, adj[uid] + a);
+  });
+
+  return adj;
+}
+
 async function previewSettleUp(groupId) {
   const group = (A.groups || []).find(g => g.id === groupId);
   if (!group) return;
   const uid = A.user?.uid;
-  const balances = computeGroupBalances(group);
+  const formerMemberSet = new Set(group.formerMembers || []);
 
-  // Generate minimal transfers
-  const transfers = minimizeCashFlow(balances, group);
+  // Use adjusted balances — accounts for exit claims already created, prevents double-counting
+  const balances = await getGroupAdjustedBalances(group);
+  const transfers = minimizeCashFlow(balances, group)
+    .filter(t => !formerMemberSet.has(t.from) && !formerMemberSet.has(t.to));
+
   if (transfers.length === 0) {
     showModal('Everyone is already square — nothing to settle!', [{ label: 'Great!', style: 'btn-green', action: () => {} }]);
     return;
@@ -3854,6 +5024,215 @@ async function executeSettleUp(groupId, transfers) {
   }
   showToast('Claims created — check your Pending tab!');
   go('pending');
+}
+
+/* ----------------------------------------------------------------
+   GROUP DELETE / CLOSE
+---------------------------------------------------------------- */
+async function deleteOrCloseGroup(groupId) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const hasExpenses = (group.expenses || []).length > 0;
+  if (!hasExpenses) {
+    showModal('Delete this group? It has no expenses so nothing will be lost.', [
+      { label: 'Delete group', style: 'btn-red', action: () => deleteGroup(groupId) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]);
+    return;
+  }
+  const balances = await getGroupAdjustedBalances(group);
+  const formerMemberSet2 = new Set(group.formerMembers || []);
+  const hasOutstanding = Object.entries(balances).some(([uid, b]) => !formerMemberSet2.has(uid) && Math.abs(b) > 0.01);
+  if (!hasOutstanding) {
+    showModal('Everyone\'s all square in this group. Close and delete it?', [
+      { label: 'Close group', style: 'btn-red', action: () => deleteGroup(groupId) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]);
+    return;
+  }
+  // Outstanding balances — offer settle & close or delete without settling
+  showModal(
+    '<div><div style="font-size:14px;font-weight:500;margin-bottom:8px;">This group has outstanding balances</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.6;">You can settle up and close — which creates normal pending claims between all members for the remaining balances — or just delete the group and lose the history.</div></div>',
+    [
+      { label: 'Settle & close', style: 'btn-green', action: () => settleAndCloseGroup(groupId) },
+      { label: 'Delete without settling', style: 'btn-red', action: () => {
+          showModal('Are you sure? All expense history for this group will be permanently lost.', [
+            { label: 'Yes, delete it', style: 'btn-red', action: () => deleteGroup(groupId) },
+            { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+          ]);
+        }
+      },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]
+  );
+}
+
+async function settleAndCloseGroup(groupId) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const uid = A.user?.uid;
+  const myName = A.userDoc?.displayName || 'Someone';
+  const today2 = new Date().toISOString().split('T')[0];
+  const groupName = group.name || 'group';
+  const balances = await getGroupAdjustedBalances(group);
+  const formerMembers2 = new Set(group.formerMembers || []);
+  const allTransfers2 = minimizeCashFlow(balances, group);
+  const transfers = allTransfers2.filter(t => !formerMembers2.has(t.from) && !formerMembers2.has(t.to));
+  if (transfers.length === 0) {
+    await deleteGroup(groupId);
+    return;
+  }
+  // Build member name map
+  const memberNames = {};
+  (A.connections || []).forEach(c => { if (c.uid || c.id) memberNames[c.uid || c.id] = c.name; });
+  memberNames[uid] = myName;
+  // Create claims for ALL pairs (not just current user)
+  let created = 0;
+  for (const t of transfers) {
+    try {
+      const credName = t.to === uid ? myName : (memberNames[t.to] || t.toName || 'Unknown');
+      const debName  = t.from === uid ? myName : (memberNames[t.from] || t.fromName || 'Unknown');
+      await db.collection('claims').add({
+        creditorUid:  t.to,
+        creditorName: credName,
+        debtorUid:    t.from,
+        debtorName:   debName,
+        amount:       t.amount,
+        description:  'Settle up: ' + groupName,
+        status:       'pending',
+        type:         'eweome',
+        participants: [t.to, t.from],
+        date:         today2,
+        groupId:      groupId,
+        createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+      });
+      created++;
+      // Notify both parties if neither is the current user, or the other party if one is
+      if (t.to !== uid)   sendPushNotification(t.to,   myName + ' settled up group: ' + groupName, fmt(t.amount) + ' claim sent');
+      if (t.from !== uid) sendPushNotification(t.from, myName + ' settled up group: ' + groupName, fmt(t.amount) + ' claim sent');
+    } catch(e) { console.error('settleAndCloseGroup claim error:', e); }
+  }
+  await deleteGroup(groupId, true);
+  showToast(created + ' claim' + (created !== 1 ? 's' : '') + ' created — group closed.');
+  go('pending');
+}
+
+async function deleteGroup(groupId, silent) {
+  try {
+    await db.collection('groups').doc(groupId).delete();
+    if (!silent) showToast('Group deleted.');
+    go('groups');
+  } catch(e) {
+    showToast('Could not delete group. Please try again.');
+  }
+}
+
+async function leaveGroup(groupId) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const uid = A.user?.uid;
+  const myName = A.userDoc?.displayName || 'Someone';
+
+  // Compute transfers using adjusted balances — accounts for prior exit claims
+  const formerMemberSet = new Set(group.formerMembers || []);
+  const adjBalances = await getGroupAdjustedBalances(group);
+  const allTransfers = minimizeCashFlow(adjBalances, group);
+  // Only include transfers involving the leaving member AND not involving any formerMember
+  const myTransfers = allTransfers.filter(t =>
+    (t.from === uid || t.to === uid) &&
+    !formerMemberSet.has(t.from) &&
+    !formerMemberSet.has(t.to)
+  );
+
+  if (myTransfers.length === 0) {
+    // No outstanding balance — simple leave
+    const willBeAlone = (group.memberUids || []).length <= 2;
+    const aloneNote = willBeAlone ? '\n\nThis will leave ' + esc((group.memberNames || {})[group.createdBy] || 'the creator') + ' as the only member — they\'ll need to delete the group themselves.' : '';
+    showModal('Leave this group? You won\'t see it any more, but it will remain for the other members.\n\nNote: your balance is calculated based on current expenses. Any expenses added after you leave won\'t change what you owe.' + aloneNote, [
+      { label: 'Leave group', style: 'btn-red', action: () => doLeaveGroup(groupId, uid, []) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]);
+    return;
+  }
+
+  // Build member name map
+
+  showModal(
+    '<div>'
+    + '<div style="font-size:14px;font-weight:500;margin-bottom:8px;">Your group debts will become real claims</div>'
+    + '<div style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">You have an outstanding balance in this group. To protect everyone, these will be converted to normal claims before you leave:</div>'
+    + myTransfers.map(t => {
+        const iMePay = t.from === uid;
+        const otherName = iMePay ? (memberNames[t.to] || t.toName || 'Unknown') : (memberNames[t.from] || t.fromName || 'Unknown');
+        const col = iMePay ? 'var(--red-600)' : 'var(--green-600)';
+        const text = iMePay ? 'You owe ' + esc(otherName) : esc(otherName) + ' owes you';
+        return '<div style="padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);border:0.5px solid var(--border);margin-bottom:6px;display:flex;justify-content:space-between;">'
+          + '<span style="font-size:13px;">' + text + '</span>'
+          + '<span style="font-size:13px;font-weight:500;color:' + col + ';">' + fmt(t.amount) + '</span>'
+          + '</div>';
+      }).join('')
+    + '<div style="font-size:12px;color:var(--text-3);margin-top:6px;line-height:1.5;">These will appear in everyone\'s Pending tab.</div>'
+    + '</div>',
+    [
+      { label: 'Create claims & leave', style: 'btn-green', action: () => doLeaveGroup(groupId, uid, myTransfers) },
+      { label: 'Cancel', style: 'btn-ghost', action: () => {} }
+    ]
+  );
+}
+
+async function doLeaveGroup(groupId, uid, transfers) {
+  const group = (A.groups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const myName = A.userDoc?.displayName || 'Someone';
+  const memberNames = group.memberNames || {};
+  const today2 = new Date().toISOString().split('T')[0];
+  try {
+    // Create real pending claims for each transfer involving this member
+    for (const t of transfers) {
+      const credName = t.to === uid ? myName : (memberNames[t.to] || t.toName || 'Unknown');
+      const debName  = t.from === uid ? myName : (memberNames[t.from] || t.fromName || 'Unknown');
+      await db.collection('claims').add({
+        creditorUid:  t.to,
+        creditorName: credName,
+        debtorUid:    t.from,
+        debtorName:   debName,
+        amount:       t.amount,
+        description:  'From group: ' + (group.name || 'group'),
+        status:       'pending',
+        type:         'eweome',
+        participants: [t.to, t.from],
+        date:         today2,
+        groupId:      groupId,
+        createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+      });
+      // Notify the other party to this specific claim
+      const otherUid = t.from === uid ? t.to : t.from;
+      sendPushNotification(otherUid, myName, 'left ' + (group.name || 'a group') + ' — a claim has been created');
+    }
+    // Notify any remaining group members who weren't involved in a direct claim
+    const notifiedAlready = new Set(transfers.map(t => t.from === uid ? t.to : t.from));
+    (group.memberUids || []).forEach(m => {
+      if (m !== uid && !notifiedAlready.has(m)) {
+        sendPushNotification(m, myName, 'has left ' + (group.name || 'the group'));
+      }
+    });
+    // Remove member from group, tracking them as a former member so settle-up doesn't duplicate their extracted claims
+    const newUids = (group.memberUids || []).filter(u => u !== uid);
+    const newNames = { ...(group.memberNames || {}) };
+    delete newNames[uid];
+    const formerMembers = [...new Set([...(group.formerMembers || []), uid])];
+    await db.collection('groups').doc(groupId).update({
+      memberUids: newUids,
+      memberNames: newNames,
+      formerMembers,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast(transfers.length > 0 ? 'Claims created and you\'ve left the group.' : 'You\'ve left the group.');
+    go('groups');
+  } catch(e) { showToast('Could not leave group. Please try again.'); }
 }
 
 function renderGroupNew() {
@@ -4028,6 +5407,12 @@ async function addGroupExpense() {
       expenses: firebase.firestore.FieldValue.arrayUnion(expense),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    // Notify all other group members
+    const myName = A.userDoc?.displayName || 'Someone';
+    const myUid = A.user?.uid;
+    (group.memberUids || []).forEach(uid => {
+      if (uid !== myUid) sendPushNotification(uid, myName, 'added an expense to ' + group.name + ': ' + desc + ' (' + fmt(amount) + ')');
+    });
     A._expenseSplit = 'equal';
     A._expenseIncluded = null;
     showToast('Expense added!');
@@ -4038,51 +5423,143 @@ async function addGroupExpense() {
 /* ================================================================
    MERGE ACCOUNTS
 ================================================================ */
+function maskEmail(email) {
+  if (!email) return '';
+  const [local, domain] = email.split('@');
+  if (!domain) return email;
+  const domainParts = domain.split('.');
+  const tld = domainParts.pop();
+  const domainName = domainParts.join('.');
+  const maskedLocal  = local.length <= 2  ? local[0] + '***'
+                     : local[0] + '***' + local[local.length - 1];
+  const maskedDomain = domainName.length <= 2 ? domainName[0] + '***'
+                     : domainName[0] + '***' + domainName[domainName.length - 1];
+  return maskedLocal + '@' + maskedDomain + '.' + tld;
+}
+
 function renderMergeAccounts() {
+  const hint = A.mergeEmail ? maskEmail(A.mergeEmail) : null;
   return `
-    <div class="signin-screen" style="padding:40px 24px;">
+    <div class="signin-screen" style="padding:40px 24px;gap:16px;">
       ${sheepSvg(60)}
       <div style="text-align:center;">
-        <div style="font-size:18px;font-weight:500;margin-bottom:8px;">We found an existing account</div>
-        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:280px;">Your phone number matches an existing ewe-o-me account${A.mergeName ? ' (' + esc(A.mergeName) + ')' : ''}. Sign into that account instead?</p>
+        <div style="font-size:18px;font-weight:600;margin-bottom:10px;">Looks like you already have an account</div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:300px;">
+          That phone number is already linked to an existing ewe-o-me account.
+          ${hint ? 'It appears to be registered under:<br><strong style="color:var(--text-1);font-size:14px;">' + esc(hint) + '</strong>' : ''}
+        </p>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.7;max-width:300px;margin-top:8px;">
+          To avoid losing your history, we recommend merging into your existing account.
+          Since you've verified this phone number, no further confirmation is needed.
+        </p>
       </div>
-      <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:10px;">
-        <button class="btn btn-green" style="padding:13px;" onclick="signIntoExistingAccount()">Yes, use my existing account</button>
-        <button class="btn btn-ghost" style="padding:11px;" onclick="keepNewAccount()">No, continue with this account</button>
+      <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px;">
+        <button class="btn btn-green" style="padding:13px;" onclick="signIntoExistingAccount()">Merge into my existing account</button>
+        <button class="btn btn-ghost" style="padding:11px;font-size:13px;" onclick="keepNewAccount()">Keep this as a separate account</button>
       </div>
+      <p style="font-size:11px;color:var(--text-3);text-align:center;max-width:280px;line-height:1.6;">
+        Merging will move all your claims, connections and history into your existing account. This can't be undone.
+      </p>
     </div>`;
 }
 
 async function signIntoExistingAccount() {
-  const phoneUser = auth.currentUser;
+  const currentUser = auth.currentUser;
+  const existingUid = A.mergeUid;
+  if (!existingUid || !currentUser) return;
   try {
-    const existingUid = A.mergeUid;
-    if (phoneUser && phoneUser.phoneNumber && existingUid) {
-      const pn = phoneUser.phoneNumber.replace(/\s/g,'');
-      const existingDoc = await db.collection('users').doc(existingUid).get();
-      const existingName = existingDoc.exists ? existingDoc.data().displayName : '';
-      await db.collection('users_by_phone').doc(pn).set({ uid: existingUid, displayName: existingName });
-      await db.collection('users').doc(existingUid).update({ phone: pn });
-      await db.collection('users').doc(phoneUser.uid).delete().catch(()=>{});
+    showToast('Merging accounts…');
+    const phone = A._pendingPhone || (currentUser?.phoneNumber || '').replace(/\s/g,'');
+    const existingDoc = await db.collection('users').doc(existingUid).get();
+    const existingName = existingDoc.exists ? existingDoc.data().displayName : '';
+
+    // Transfer any claims the phone user somehow accumulated
+    const asCred = await db.collection('claims').where('creditorUid','==',currentUser.uid).get();
+    const asDebt = await db.collection('claims').where('debtorUid','==',currentUser.uid).get();
+    if (!asCred.empty || !asDebt.empty) {
+      const batch = db.batch();
+      asCred.docs.forEach(d => batch.update(d.ref, {
+        creditorUid:  existingUid,
+        creditorName: existingName || d.data().creditorName,
+        participants: [existingUid, d.data().debtorUid],
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+      }));
+      asDebt.docs.forEach(d => batch.update(d.ref, {
+        debtorUid:    existingUid,
+        debtorName:   existingName || d.data().debtorName,
+        participants: [d.data().creditorUid, existingUid],
+        updatedAt:    firebase.firestore.FieldValue.serverTimestamp()
+      }));
+      await batch.commit();
     }
-    A.mergeUid = null; A.mergeName = '';
+
+    // Link phone to existing account in Firestore
+    if (phone) {
+      await db.collection('users_by_phone').doc(phone).set({ uid: existingUid, displayName: existingName });
+      await db.collection('users').doc(existingUid).update({ phone }).catch(() => {});
+    }
+
+    // Clean up duplicate user doc and email lookup
+    await db.collection('users').doc(currentUser.uid).delete().catch(() => {});
+    if (currentUser.email) {
+      await db.collection('users_by_email').doc(currentUser.email.toLowerCase()).delete().catch(() => {});
+    }
+
+    // Reset ALL app state — especially phone step so signin screen is clean
+    _resetMergeAndPhoneState();
+
+    // Persist skip flag so even a page reload doesn't re-trigger merge
+    try { localStorage.setItem('eweome_skip_merge_until', Date.now() + 120000); } catch(e) {}
+
     await auth.signOut();
-    A.signinMode = 'choose';
-    showToast('Phone number linked! Please sign in with Google or email.');
+    showToast('Done! Now sign in with your Google or email account.');
     go('signin');
   } catch(e) {
-    showToast('Could not link accounts. Please sign in with Google instead.');
-    await auth.signOut(); go('signin');
+    console.error('Merge error:', e);
+    _resetMergeAndPhoneState();
+    try { localStorage.setItem('eweome_skip_merge_until', Date.now() + 120000); } catch(e) {}
+    await auth.signOut().catch(() => {});
+    showToast('Your history is safe — please sign in with your original Google or email account.');
+    go('signin');
   }
 }
-async function keepNewAccount() { A.mergeUid=null; A.mergeName=''; await ensureUserDoc(A.user); subscribeToData(A.user.uid); go('home'); }
+
+function _resetMergeAndPhoneState() {
+  A.mergeUid = null; A.mergeName = ''; A.mergeEmail = '';
+  A._pendingPhone = null; A._skipMergeCheck = true;
+  A.signinMode = 'choose'; A.phoneStep = 'number';
+  A.signinError = ''; A._confirmResult = null; A._phoneVerifier = null;
+  A._smsSent = false;
+}
+
+async function keepNewAccount() {
+  A.mergeUid = null; A.mergeName = ''; A.mergeEmail = ''; A._pendingPhone = null;
+  await ensureUserDoc(A.user);
+  subscribeToData(A.user.uid);
+  go('home');
+}
 
 /* ================================================================
    WHATSAPP SHARING
 ================================================================ */
+function getAppLink() {
+  return isAPK()
+    ? 'https://play.google.com/store/apps/details?id=com.eweome.app'
+    : 'https://eweome-41e0f.web.app';
+}
+
 function inviteContact(name) {
-  const text = (name?name+', ':'') + "I'd like to add you on ewe-o-me, an app for tracking who owes what. Join: https://eweome-41e0f.web.app";
-  if (navigator.share) navigator.share({text}).catch(()=>{}); else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+  const appLink = getAppLink();
+  const storeHint = isAPK() ? ' (free on Google Play)' : '';
+  const text = (name ? name + ', ' : '') + "I'd like to add you on ewe-o-me, an app for tracking who owes what. Join here" + storeHint + ': ' + appLink;
+  if (isAPK()) {
+    const intentUrl = 'intent://send?text=' + encodeURIComponent(text) + '#Intent;package=com.whatsapp;scheme=whatsapp;end';
+    window.location.href = intentUrl;
+  } else if (navigator.share) {
+    navigator.share({ text }).catch(() => {});
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
 }
 
 function buildShareText(claim, isNewContact) {
@@ -4092,7 +5569,8 @@ function buildShareText(claim, isNewContact) {
   const desc = claim.description || '';
   const date = claim.date ? fmtDate(claim.date) : '';
   const onAcct = claim.onAccount ? ' There\'s no rush to pay.' : '';
-  const appUrl = 'https://eweome-41e0f.web.app';
+  const appLink = getAppLink();
+  const storeHint = isAPK() ? ' (free on Google Play)' : '';
 
   if (isNewContact) {
     // Wordy intro version for people who may not have the app
@@ -4105,7 +5583,7 @@ function buildShareText(claim, isNewContact) {
       + `I'm using an app called ewe-o-me to keep track of money between friends and family — it makes it easy to log debts, agree amounts, and mark things as settled when they're paid. No payments go through the app, it's just a shared record.
 
 `
-      + `It would be great if you joined too so we can keep track of this together: ${appUrl}`;
+      + `It would be great if you joined too so we can keep track of this together: ${appLink}${storeHint}`;
   } else {
     // Short version for existing contacts
     const direction = io
@@ -4120,18 +5598,25 @@ function buildShareText(claim, isNewContact) {
 function shareViaSystem(claimId) {
   const all=[...A.pendingClaims,...A.sentClaims,...A.ledger,...(A.settled||[])];
   const claim=all.find(c=>c.id===claimId); if(!claim) return;
-  // Check if recipient is an existing connection
   const recipientUid = claim.type==='ioowe' ? claim.creditorUid : claim.debtorUid;
   const isNew = !(A.connections||[]).some(c => c.id === recipientUid);
   const text=buildShareText(claim, isNew);
-  // Use direct WhatsApp link if we have the recipient's phone
   const conn = (A.connections||[]).find(c => c.uid === recipientUid || c.id === recipientUid);
-  const recipientPhone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') : 
+  const recipientPhone = conn?.phone ? conn.phone.replace(/[^\d+]/g,'') :
     (claim.pendingPhone ? claim.pendingPhone.replace(/[^\d+]/g,'') : null);
-  const waUrl = recipientPhone 
-    ? 'https://wa.me/' + recipientPhone + '?text=' + encodeURIComponent(text)
-    : 'https://wa.me/?text=' + encodeURIComponent(text);
-  if(navigator.share) navigator.share({text}).catch(()=>{}); else window.open(waUrl,'_blank');
+  if (isAPK()) {
+    // Android: open WhatsApp app directly
+    const intentUrl = 'intent://send' + (recipientPhone ? '?phone=' + recipientPhone + '&' : '?') +
+      'text=' + encodeURIComponent(text) + '#Intent;package=com.whatsapp;scheme=whatsapp;end';
+    window.location.href = intentUrl;
+  } else if (navigator.share) {
+    navigator.share({ text }).catch(() => {});
+  } else {
+    const waUrl = recipientPhone
+      ? 'https://wa.me/' + recipientPhone + '?text=' + encodeURIComponent(text)
+      : 'https://wa.me/?text=' + encodeURIComponent(text);
+    window.open(waUrl, '_blank');
+  }
 }
 
 /* ================================================================
@@ -4148,10 +5633,19 @@ async function confirmCancelClaim() {
 function abortCancelClaim() { A.confirmCancelId=null; render(); }
 
 function skipClaim(id) {
-  const idx=A.pendingClaims.findIndex(c=>c.id===id);
-  if(idx>=0){const s=A.pendingClaims.splice(idx,1)[0];A.pendingClaims.push(s);}
-  const next=A.pendingClaims.find(c=>c.id!==id);
-  if(next){A.selectedClaimId=next.id;go('req_detail');}else go('pending');
+  if (!A._skippedIds) A._skippedIds = new Set();
+  A._skippedIds.add(id);
+  // Find next claim that hasn't been skipped yet
+  const next = A.pendingClaims.find(c => !A._skippedIds.has(c.id));
+  if (next) {
+    A.selectedClaimId = next.id;
+    go('req_detail');
+  } else {
+    // All pending items skipped — go home
+    A._skippedIds = null;
+    showToast('All caught up for now!');
+    go('home');
+  }
 }
 
 async function confirmBulkSettle(personId) {
@@ -4209,7 +5703,7 @@ function renderSettings() {
   return `
     <div style="padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:17px;font-weight:500;">Settings</div>
-      <div style="font-size:10px;color:var(--text-3);">v1.8.5</div>
+      <div style="font-size:10px;color:var(--text-3);">v1.9.1</div>
     </div>
     <hr class="divider">
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
@@ -4246,6 +5740,8 @@ function renderSettings() {
       <div style="font-size:15px;margin-bottom:6px;">Export my data</div>
       <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:10px;">Download a plain-text summary of all your claims — useful as a personal record or backup.</p>
       <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="exportMyData()">&#128229; Download my data</button>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="A._walkthroughStep=0;go('walkthrough')">&#127981; Replay the guide</button>
+      <button class="btn btn-ghost" style="font-size:13px;padding:9px;" onclick="toggleSheepMode()">${A.sheepMode ? '🐑 Restore normal mode' : '🐑 Make it a bit more sheep-y'}</button>
     </div>
     <div style="padding:14px 16px;border-bottom:0.5px solid var(--border);">
       <div style="font-size:15px;margin-bottom:6px;">Bank details</div>
@@ -4491,6 +5987,24 @@ function normalisePhone(raw) {
   return v;
 }
 
+async function forgotPassword() {
+  const email = document.getElementById('si-email')?.value?.trim();
+  if (!email) {
+    A.signinError = 'Please enter your email address first, then tap Forgot password.';
+    render(); return;
+  }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    A.signinError = '';
+    showToast('Password reset email sent to ' + email + ' — check your inbox.');
+  } catch(e) {
+    A.signinError = e.code === 'auth/user-not-found'
+      ? 'No account found with that email address.'
+      : 'Could not send reset email. Please check the address and try again.';
+    render();
+  }
+}
+
 async function signInEmail(isNew) {
   A.signinError = '';
   const email = document.getElementById('si-email')?.value.trim();
@@ -4511,7 +6025,7 @@ async function signInPhone() {
     if (!A._phoneVerifier) A._phoneVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
     A.phoneNumber = phone;
     A._confirmResult = await auth.signInWithPhoneNumber(phone, A._phoneVerifier);
-    A.phoneStep = 'code'; render();
+    A.phoneStep = 'code'; A.signinError = ''; A._smsSent = true; render();
   } catch(e) { A.signinError = 'Could not send code. Check the number and try again.'; A._phoneVerifier = null; render(); }
 }
 
@@ -4596,6 +6110,16 @@ function subscribeToData(uid) {
   // Clean up previous listeners
   A._unsubs.forEach(fn => fn());
   A._unsubs = [];
+
+  // Simplifications involving this user
+  const s1 = db.collection('simplifications')
+    .where('participants', 'array-contains', uid)
+    .where('status', '==', 'pending_consent')
+    .onSnapshot(snap => {
+      A.simplifications = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (!['loading','signin'].includes(A.screen)) render();
+    }, () => {});
+  A._unsubs.push(s1);
 
   // Groups
   const g1 = db.collection('groups')
@@ -4688,6 +6212,7 @@ function subscribeToData(uid) {
         (c.status === 'evidence_requested'  && c.creditorUid === uid) ||
         (c.status === 'evidence_requested'  && c.debtorUid   === uid && c.evidenceUrl) ||
         (c.status === 'settlement_pending'  && c.creditorUid === uid) ||
+        (c.status === 'agreed'              && (c.pendingPartialAmount||0) > 0 && c.creditorUid === uid) ||
         (c.status === 'rejected'            && c.creditorUid === uid && !c.creditorDismissed)
       ));
 
@@ -4698,18 +6223,121 @@ function subscribeToData(uid) {
         (c.status === 'pending'           && c.creditorUid === uid && c.type !== 'ioowe') ||
         // IOU debtor waiting for creditor response (they sent it)
         (c.status === 'pending'           && c.debtorUid   === uid && c.type === 'ioowe') ||
-        (c.status === 'queried'           && c.debtorUid   === uid && !c.answeredQuestion) ||
-        // Debtor marked as paid — waiting for creditor to confirm
-        (c.status === 'settlement_pending' && c.debtorUid   === uid)
+        (c.status === 'queried'           && c.debtorUid   === uid && !c.answeredQuestion)
         )
       );
 
-      // Outstanding agreed debts
-      A.ledger = all.filter(c => c.status === 'agreed' || c.status === 'accepted' || c.status === 'settlement_pending');
+      // Outstanding agreed debts — exclude settlement_pending for the debtor (they've paid, waiting on creditor)
+      A.ledger = all.filter(c =>
+        (c.status === 'agreed' || c.status === 'accepted') ||
+        (c.status === 'settlement_pending' && c.creditorUid !== uid) // keep in debtor ledger as "awaiting confirmation"
+      );
       A.settled = all.filter(c => c.status === 'settled');
 
       // Fully settled history
       A.settled = all.filter(c => c.status === 'settled');
+
+      // Activity digest: on first load, check for changes since last open
+      if (!A._activityChecked) {
+        A._activityChecked = true;
+        const lastOpenedMs = parseInt(localStorage.getItem('eweome_last_opened') || '0', 10);
+        if (lastOpenedMs > 0) {
+          const uid2 = uid;
+          const rawEvents = [];
+          // Check for new simplification suggestions
+          (A.simplifications || []).forEach(s => {
+            const createdMs = s.createdAt?.toDate?.()?.getTime?.() || 0;
+            if (createdMs > lastOpenedMs && s.consents?.[uid2] === null) {
+              const others = s.participants.filter(p => p !== uid2)
+                .map(p => (s.participantNames||{})[p] || 'someone').join(' and ');
+              rawEvents.push({ eventType: 'simplification', otherName: others, amount: 0, claimId: s.id, status: 'pending_consent' });
+            }
+          });
+          all.forEach(c => {
+            const updatedMs = c.updatedAt?.toDate?.()?.getTime?.() || 0;
+            if (updatedMs <= lastOpenedMs) return;
+            const iAmCreditor = c.creditorUid === uid2;
+            const iAmDebtor   = c.debtorUid   === uid2;
+            const iAmSender   = (c.type !== 'ioowe' && iAmCreditor) || (c.type === 'ioowe' && iAmDebtor);
+            const otherName   = iAmCreditor ? (c.debtorName || 'Someone') : (c.creditorName || 'Someone');
+            const createdMs   = c.createdAt?.toDate?.()?.getTime?.() || 0;
+            const isNew       = createdMs > lastOpenedMs;
+            let eventType = null;
+            if (isNew && !iAmSender) {
+              // Normal claim sent to me
+              if (c.groupId) {
+                eventType = 'group_claim_debtor';
+              } else {
+                eventType = c.type === 'eweome' ? 'sent_yom' : 'sent_iou';
+              }
+            } else if (isNew && iAmSender && c.groupId) {
+              // Group claim created on my behalf (I'm creditor but didn't send it)
+              eventType = 'group_claim_creditor';
+            } else if (!isNew) {
+              switch (c.status) {
+                case 'agreed':
+                  if (!iAmSender) eventType = 'accepted'; break;
+                case 'queried':
+                  if (iAmSender && c.counterAmount)          eventType = 'countered';
+                  else if (iAmSender && c.question)          eventType = 'questioned';
+                  else if (!iAmSender && c.answeredQuestion) eventType = 'answered';
+                  break;
+                case 'rejected':
+                  if (iAmSender) eventType = 'rejected'; break;
+                case 'settlement_pending':
+                  if (iAmCreditor) eventType = 'marked_paid'; break;
+                case 'settled':
+                  // Only show to debtor — creditor did the confirming themselves
+                  if (iAmDebtor) eventType = 'settled'; break;
+                case 'cancelled':
+                  if (!iAmSender) eventType = 'cancelled'; break;
+              }
+            }
+            if (eventType) rawEvents.push({ eventType, otherName, amount: c.amount, claimId: c.id, status: c.status, counterAmount: c.counterAmount });
+          });
+
+          // Collapse repeated events: group by (otherName, eventType)
+          const groups = {};
+          rawEvents.forEach(e => {
+            const key = e.otherName + '||' + e.eventType;
+            if (!groups[key]) groups[key] = { ...e, count: 0, total: 0, amounts: [] };
+            groups[key].count++;
+            groups[key].total += e.amount || 0;
+            groups[key].amounts.push(e.amount);
+          });
+
+          const digest = Object.values(groups).map(g => {
+            const n = g.otherName, c = g.count, t = fmt(g.total);
+            let text;
+            switch (g.eventType) {
+              case 'sent_yom':          text = c > 1 ? n+' sent you '+c+' new requests totalling '+t : n+' sent you a YOM for '+fmt(g.amounts[0]); break;
+              case 'sent_iou':          text = c > 1 ? n+' logged '+c+' IOUs to you totalling '+t     : n+' logged an IOU to you for '+fmt(g.amounts[0]); break;
+              case 'group_claim_debtor':text = c > 1 ? 'Group settle-up: you owe '+n+' across '+c+' claims ('+t+' total)' : 'Group settle-up: you owe '+n+' '+fmt(g.amounts[0]); break;
+              case 'group_claim_creditor': text = c > 1 ? 'Group settle-up: '+c+' claims created on your behalf ('+t+' total owed to you)' : 'Group settle-up: '+n+' owes you '+fmt(g.amounts[0]); break;
+              case 'accepted':   text = c > 1 ? n+' accepted '+c+' of your claims ('+t+' total)' : n+' accepted your claim for '+fmt(g.amounts[0]); break;
+              case 'countered':  text = n+' has countered a claim'; break;
+              case 'questioned': text = c > 1 ? n+' has questions about '+c+' claims' : n+' has a question about your claim'; break;
+              case 'answered':   text = n+' answered your question'; break;
+              case 'rejected':   text = c > 1 ? n+' rejected '+c+' of your claims' : n+' rejected your claim for '+fmt(g.amounts[0]); break;
+              case 'marked_paid':text = c > 1 ? n+' says they\'ve paid you '+c+' debts ('+t+' total)' : n+' says they\'ve paid you '+fmt(g.amounts[0]); break;
+              case 'settled':    text = c > 1 ? n+' confirmed '+c+' debts as settled ('+t+' total)' : 'Your '+fmt(g.amounts[0])+' debt to '+n+' is now confirmed as settled'; break;
+              case 'cancelled':  text = c > 1 ? n+' withdrew '+c+' claims' : n+' withdrew a claim for '+fmt(g.amounts[0]); break;
+              case 'simplification': text = 'A debt simplification has been suggested involving you and '+n+' — tap to see it'; break;
+              default:           text = 'Activity with '+n;
+            }
+            return { text, claimId: g.claimId, status: g.status, amount: g.total };
+          });
+
+          if (digest.length > 0) {
+            A.activityDigest = digest;
+            localStorage.setItem('eweome_last_opened', Date.now().toString());
+            go('activity_digest');
+            return;
+          }
+        }
+        // Nothing to show — update timestamp now
+        localStorage.setItem('eweome_last_opened', Date.now().toString());
+      }
 
       if (!['loading','signin'].includes(A.screen)) render();
     });
@@ -4722,19 +6350,29 @@ function subscribeToData(uid) {
 auth.onAuthStateChanged(async fbUser => {
   if (fbUser) {
     A.user = fbUser;
-    if (fbUser.phoneNumber && !fbUser.email) {
-      const pn = fbUser.phoneNumber.replace(/\s/g,'');
-      const snap = await db.collection('users_by_phone').doc(pn).get().catch(() => null);
-      if (snap && snap.exists && snap.data().uid !== fbUser.uid) {
-        A.mergeUid = snap.data().uid;
-        A.mergeName = snap.data().displayName || '';
-        go('merge_accounts');
-        return;
+    if (fbUser.phoneNumber && !fbUser.email && !A._skipMergeCheck) {
+      const _skipUntil = parseInt(localStorage.getItem('eweome_skip_merge_until') || '0', 10);
+      const _shouldSkip = Date.now() < _skipUntil;
+      if (!_shouldSkip) {
+        const pn = fbUser.phoneNumber.replace(/\s/g,'');
+        const snap = await db.collection('users_by_phone').doc(pn).get().catch(() => null);
+        if (snap && snap.exists && snap.data().uid !== fbUser.uid) {
+          A.mergeUid = snap.data().uid;
+          A.mergeName = snap.data().displayName || '';
+          try {
+            const existingDoc = await db.collection('users').doc(A.mergeUid).get();
+            A.mergeEmail = existingDoc.exists ? (existingDoc.data().email || '') : '';
+          } catch(e) { A.mergeEmail = ''; }
+          go('merge_accounts');
+          return;
+        }
       }
     }
+    A._skipMergeCheck = false; // reset after successful pass
     await ensureUserDoc(fbUser);
     subscribeToData(fbUser.uid);
     requestNotificationPermission(fbUser.uid);
+    refreshFcmToken(fbUser.uid); // refresh token on every open, not just first time
     if (window.AndroidBridge) {
       try { window.AndroidBridge.saveFcmToken(fbUser.uid); }
       catch(e) { console.log('FCM bridge call failed:', e); }
@@ -4742,7 +6380,9 @@ auth.onAuthStateChanged(async fbUser => {
     if (A.needsDisplayName) go('name_prompt');
     else if (A.needsOnboarding) go('onboarding');
     else if (!A.welcomeSeen && !localStorage.getItem('eweome_welcome_seen')) go('welcome');
+    else if (hasNewFeaturesToShow()) go('whats_new');
     else {
+      localStorage.setItem('eweome_last_seen_version', APP_VERSION);
       const restorable = ['home','position','pending','all_connections','notes','help','groups'];
       const last = localStorage.getItem('eweome_last_screen');
       go(last && restorable.includes(last) ? last : 'home');
