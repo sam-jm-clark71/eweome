@@ -2936,6 +2936,7 @@ function renderPosition() {
   const items  = Object.entries(bals).filter(([,v]) => Math.abs(v.bal) >= 0.01).map(([id,v]) => ({id,...v}));
   const owed   = items.filter(i => i.bal > 0).reduce((s, i) => s + i.bal, 0);
   const owing  = items.filter(i => i.bal < 0).reduce((s, i) => s + Math.abs(i.bal), 0);
+  const pendingConfirmation = A.ledger.filter(c => c.status === 'settlement_pending' && c.debtorUid === uid).reduce((s,c) => s + remainingAmount(c), 0);
 
   return `
     <div style="padding:14px 16px 4px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -2952,6 +2953,7 @@ function renderPosition() {
         <div class="balance-card red">
           <div class="balance-label">You owe</div>
           <div class="balance-amount">${fmt(owing)}</div>
+          ${pendingConfirmation > 0 ? `<div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:2px;">incl. ${fmt(pendingConfirmation)} awaiting confirmation</div>` : ''}
         </div>
       </div>
     </div>
@@ -3048,9 +3050,10 @@ function renderPosDetail() {
       + (iCr?'+':'-') + fmt(e.amount) + '</span></div>'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
       + '<span style="font-size:12px;color:var(--text-2);">' + fmtDate(e.date) + '</span>'
-      + (isSettled ? '<span class="tag tag-green">Settled</span>' : isPendingSettlement ? '<span class="tag tag-amber">' + (c.creditorUid === A.user?.uid ? 'Payment claimed — confirm in Pending' : 'Payment sent — awaiting confirmation') + '</span>' : '<span class="tag tag-amber">Outstanding</span>')
+      + (isSettled ? '<span class="tag tag-green">Settled</span>' : isPendingSettlement ? '<span class="tag tag-amber">' + (e.creditorUid === A.user?.uid ? 'Payment claimed — confirm in Pending' : 'Payment sent — awaiting confirmation') + '</span>' : '<span class="tag tag-amber">Outstanding</span>')
       + '</div>'
-      + (isPendingSettlement ? '<div style="margin-top:6px;font-size:12px;color:var(--amber-600);">&#9888; ' + (iCr ? esc(e.debtorName) : esc(e.creditorName)) + ' says they\'ve paid — check your Pending tab to confirm.</div>' : '')
+      + (isPendingSettlement && e.creditorUid === A.user?.uid ? '<div style="margin-top:6px;font-size:12px;color:var(--amber-600);">&#9888; ' + esc(e.debtorName) + ' says they\'ve paid — confirm in your Pending tab.</div>' : '')
+      + (isPendingSettlement && e.debtorUid === A.user?.uid ? '<div style="margin-top:6px;font-size:12px;color:var(--green-700);">&#9203; Payment sent — waiting for ' + esc(e.creditorName) + ' to confirm receipt.</div>' : '')
       + (!isSettled && !isPendingSettlement ? '<div style="margin-top:8px;"><button class="btn btn-ghost" style="font-size:12px;padding:8px;" onclick="markSettled(\'' + e.id + '\')">Mark as settled</button></div>' : '')
       + '</div>';
   };
