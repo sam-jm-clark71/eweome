@@ -2936,7 +2936,7 @@ function renderPosition() {
   const items  = Object.entries(bals).filter(([,v]) => Math.abs(v.bal) >= 0.01).map(([id,v]) => ({id,...v}));
   const owed   = items.filter(i => i.bal > 0).reduce((s, i) => s + i.bal, 0);
   const owing  = items.filter(i => i.bal < 0).reduce((s, i) => s + Math.abs(i.bal), 0);
-  const pendingConfirmation = A.ledger.filter(c => c.status === 'settlement_pending' && c.debtorUid === uid).reduce((s,c) => s + remainingAmount(c), 0);
+  const pendingConfirmation = A.ledger.filter(c => c.status === 'settlement_pending' && c.debtorUid === A.user.uid).reduce((s,c) => s + remainingAmount(c), 0);
 
   return `
     <div style="padding:14px 16px 4px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
